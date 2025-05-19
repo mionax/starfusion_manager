@@ -21,3 +21,4 @@ async def handle_get_workflows(request):
 
 def setup(app):
     app.router.add_get("/workflow_manager/list", handle_get_workflows)
+    app.router.add_static("/custom_nodes/workflow_manager/workflows", WORKFLOW_DIR)
