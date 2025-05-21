@@ -26,6 +26,36 @@ if not GITHUB_TOKEN:
 
 github_api = GitHubAPI(GITHUB_REPO_OWNER, GITHUB_REPO_NAME, token=GITHUB_TOKEN)
 
+# Define a simple cache for workflow data
+import time
+
+class WorkflowCache:
+    def __init__(self, expire_time=300): # Cache expires after 300 seconds (5 minutes)
+        self.cache = {}
+        self.expire_time = expire_time
+        print(f"[工作流管理器] 缓存初始化，过期时间: {self.expire_time} 秒")
+
+    def get(self, key):
+        """Get data from cache if not expired."""
+        if key in self.cache:
+            data, timestamp = self.cache[key]
+            if time.time() - timestamp < self.expire_time:
+                print(f"[工作流管理器] 缓存命中: {key}")
+                return data
+            else:
+                print(f"[工作流管理器] 缓存过期: {key}")
+                del self.cache[key]
+        print(f"[工作流管理器] 缓存未命中: {key}")
+        return None
+
+    def set(self, key, value):
+        """Set data in cache with current timestamp."""
+        self.cache[key] = (value, time.time())
+        print(f"[工作流管理器] 缓存更新: {key}")
+
+# Instantiate the cache
+workflow_cache = WorkflowCache()
+
 # 确保工作流目录存在
 os.makedirs(WORKFLOW_DIR, exist_ok=True)
 
@@ -62,7 +92,18 @@ def scan_remote_workflow_dir(github_api_instance, base_path):
     data = []
     try:
         print(f"[工作流管理器] 开始扫描云端目录: {base_path} in {GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}")
-        contents = github_api_instance.get_contents(base_path)
+        
+        # Check cache first for directory contents
+        cache_key = f"dir_list:{base_path}"
+        cached_contents = workflow_cache.get(cache_key)
+
+        if cached_contents is not None:
+            contents = cached_contents
+        else:
+            contents = github_api_instance.get_contents(base_path)
+            if contents is not None:
+                workflow_cache.set(cache_key, contents)
+
 
         if contents is None:
              print(f"[工作流管理器] 获取云端目录内容失败或目录不存在: {base_path}")
@@ -176,7 +217,16 @@ async def handle_get_remote_workflow(request):
         # If rel_path is '/filename.json', we need to remove the leading slash
         github_path = rel_path.lstrip('/') # Remove leading slash if exists
 
-        content = github_api.get_file_content(github_path)
+        # Check cache first for file content
+        cache_key = f"file_content:{github_path}"
+        cached_content = workflow_cache.get(cache_key)
+
+        if cached_content is not None:
+             content = cached_content
+        else:
+            content = github_api.get_file_content(github_path)
+            if content is not None:
+                workflow_cache.set(cache_key, content)
 
         if content is None:
             print(f"[工作流管理器] 云端文件不存在或获取失败: {github_path}")
@@ -194,6 +244,17 @@ async def handle_get_remote_workflow(request):
         print(f"[工作流管理器] 加载云端工作流文件时出错: {e}")
         return web.json_response({"error": str(e)}, status=500)
 
+# New handler to clear remote workflow cache
+async def handle_clear_remote_cache(request):
+    try:
+        print("[工作流管理器] 收到清除云端缓存请求")
+        workflow_cache.cache.clear()
+        print("[工作流管理器] 云端缓存已清除")
+        return web.json_response({"status": "success", "message": "云端缓存已清除"})
+    except Exception as e:
+        print(f"[工作流管理器] 清除云端缓存时出错: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
 def setup(app):
     try:
         print("="*50)
@@ -207,6 +268,9 @@ def setup(app):
         # Register new routes for remote workflows
         app.router.add_get("/workflow_manager/list_remote", handle_get_remote_workflows)
         app.router.add_get("/workflow_manager/workflows_remote/{path:.*}", handle_get_remote_workflow)
+
+        # Register new route for clearing remote cache
+        app.router.add_post("/workflow_manager/clear_remote_cache", handle_clear_remote_cache)
 
         print("[工作流管理器] 工作流管理器路由已注册")
         print("="*50)
