@@ -14,7 +14,7 @@
 1. 在 ComfyUI 的 `custom_nodes` 目录下克隆此仓库：
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/yourusername/ComfyUI-Workflow-Manager.git
+git clone https://github.com/mionax/Starfusion_manager.git
 ```
 
 2. 重启 ComfyUI
