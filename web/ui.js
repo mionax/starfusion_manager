@@ -210,7 +210,7 @@ app.registerExtension({
                         margin-right: 6px;
                         color: #ffe066;
                         filter: drop-shadow(0 1px 2px #0008);
-                    }
+                     }
                 `;
                 el.appendChild(style); // 将样式添加到元素中
 

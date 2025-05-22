@@ -14,15 +14,31 @@ print("="*50)
 print("工作流管理器插件开始加载...")
 print("="*50)
 
-WORKFLOW_DIR = os.path.join(os.path.dirname(__file__), "workflows")
+# 读取云端仓库配置
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'cloud_workflow_config.json')
+with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+    cloud_config = json.load(f)
+GITHUB_REPO_OWNER = cloud_config.get('github_repo_owner', '')
+GITHUB_REPO_NAME = cloud_config.get('github_repo_name', '')
+# 优先从环境变量读取token
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN') or cloud_config.get('github_token', '')
+REMOTE_WORKFLOW_BASE_PATH = cloud_config.get('workflows_base_path', '')
+# 新增：本地工作流目录可配置
+LOCAL_WORKFLOW_DIR = cloud_config.get('local_workflow_dir', None)
 
-# Configure GitHub API
-GITHUB_REPO_OWNER = 'mionax'
-GITHUB_REPO_NAME = 'starfusion-workflows'
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN') # Get token from environment variable
+if LOCAL_WORKFLOW_DIR:
+    # 如果是相对路径，转换为绝对路径（相对于当前py文件目录）
+    if not os.path.isabs(LOCAL_WORKFLOW_DIR):
+        WORKFLOW_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), LOCAL_WORKFLOW_DIR))
+    else:
+        WORKFLOW_DIR = LOCAL_WORKFLOW_DIR
+    print(f"[工作流管理器] 使用自定义本地工作流目录: {WORKFLOW_DIR}")
+else:
+    WORKFLOW_DIR = os.path.join(os.path.dirname(__file__), "workflows")
+    print(f"[工作流管理器] 使用默认本地工作流目录: {WORKFLOW_DIR}")
 
 if not GITHUB_TOKEN:
-    print("[工作流管理器] 警告: 未设置 GITHUB_TOKEN 环境变量，云端工作流功能将无法使用。")
+    print("[工作流管理器] 警告: 未设置 GITHUB_TOKEN，云端工作流功能将无法使用。")
 
 github_api = GitHubAPI(GITHUB_REPO_OWNER, GITHUB_REPO_NAME, token=GITHUB_TOKEN)
 
@@ -30,7 +46,7 @@ github_api = GitHubAPI(GITHUB_REPO_OWNER, GITHUB_REPO_NAME, token=GITHUB_TOKEN)
 import time
 
 class WorkflowCache:
-    def __init__(self, expire_time=300): # Cache expires after 300 seconds (5 minutes)
+    def __init__(self, expire_time=3600): # Cache expires after 3600 seconds (1 hour)
         self.cache = {}
         self.expire_time = expire_time
         print(f"[工作流管理器] 缓存初始化，过期时间: {self.expire_time} 秒")
@@ -157,24 +173,21 @@ async def handle_get_remote_workflows(request):
         if not GITHUB_TOKEN:
              return web.json_response({"error": "GitHub Token not configured"}, status=500)
 
-        # Assuming workflows are in the root directory of the repo
-        remote_workflow_base_path = '' # Changed to empty string for root
+        # 使用配置文件中的base_path
+        remote_workflow_base_path = REMOTE_WORKFLOW_BASE_PATH
         structure = scan_remote_workflow_dir(github_api, remote_workflow_base_path) # Pass the instance
 
         # If the base path itself contains files, they won't be added under a folder named after the path itself
         # We need to handle the root of the remote_workflow_base_path if it contains files.
-        # Let's rescan the base_path only to get files directly in it.
         base_contents = github_api.get_contents(remote_workflow_base_path)
         base_files = [item for item in base_contents if item['type'] == 'file' and item['name'].endswith('.json')]
         if base_files:
-            # Add files at the root of the remote workflow path under a folder named after the path itself (which is '/ ')
-             structure.insert(0, { # Insert at the beginning
-                 "name": remote_workflow_base_path if remote_workflow_base_path != '' else '/', # Use '/' for root
-                 "files": [f['name'] for f in base_files]
-             })
-             print(f"[工作流管理器] 添加云端根文件夹: {remote_workflow_base_path}")
-             print(f"[工作流管理器] 发现云端根文件: {[f['name'] for f in base_files]}")
-
+            structure.insert(0, {
+                "name": remote_workflow_base_path if remote_workflow_base_path != '' else '/',
+                "files": [f['name'] for f in base_files]
+            })
+            print(f"[工作流管理器] 添加云端根文件夹: {remote_workflow_base_path}")
+            print(f"[工作流管理器] 发现云端根文件: {[f['name'] for f in base_files]}")
 
         print(f"[工作流管理器] 云端工作流列表: {json.dumps(structure, ensure_ascii=False)}")
 
