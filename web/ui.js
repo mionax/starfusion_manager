@@ -24,7 +24,7 @@ app.registerExtension({
                         padding: 10px;
                         color: white;
                         font-family: sans-serif;
-                        background-color: #2a2a2a; /* 微深的背景 */
+                        background-color: transparent;
                         border-radius: 5px;
                         height: 100%; /* 填充父容器高度 */
                         overflow-y: hidden; /* 容器本身不滚动，让内部内容区域滚动 */
@@ -108,18 +108,28 @@ app.registerExtension({
                     }
 
                     .workflow-folder { /* 文件夹样式 */
-                        margin-top: 15px;
+                        margin-top: 22px;
                         font-weight: bold;
-                        color: #ddd;
+                        font-size: 1.08em;
+                        color: #fff;
+                        letter-spacing: 1px;
+                        padding: 10px 0 10px 18px;
+                        background: linear-gradient(90deg, #232c3a 60%, #232c3a00 100%);
+                        border-left: 6px solid #4a90e2;
+                        margin-bottom: 8px;
+                        border-radius: 4px 0 0 4px;
+                        box-shadow: 0 2px 8px 0 rgba(40,80,180,0.04);
                     }
 
                     .workflow-file-item { /* 文件项样式 */
-                        margin-left: 20px;
+                        margin-left: 38px;
                         display: flex;
                         align-items: center;
                         justify-content: space-between;
-                        padding: 5px 0;
+                        padding: 4px 0 4px 0;
                         border-bottom: 1px solid #3a3a3a; /* 分隔线 */
+                        font-size: 1em;
+                        color: #e6f7ff;
                     }
                     .workflow-file-item:last-child {
                          border-bottom: none; /* 最后一个文件项没有分隔线 */
@@ -408,8 +418,7 @@ function renderFolders(data, container, loadFunc) {
     data.forEach(folder => {
         const folderElem = document.createElement("div");
         folderElem.className = "workflow-folder"; // 添加类名
-        // folderElem.style = ""; // 清除旧的inline样式
-        folderElem.innerHTML = `📁 ${folder.name}`; // 直接设置文本，避免嵌套div
+        folderElem.innerText = folder.name; // 只显示文件夹名，无图标
 
         folder.files.forEach(file => {
             const fullPath = `${folder.name}/${file}`;
@@ -420,9 +429,10 @@ function renderFolders(data, container, loadFunc) {
             // fileElem.style = ""; // 清除旧的inline样式
 
             const title = document.createElement("span");
-            title.innerText = file;
+            // 只显示文件名（去掉.json后缀）
+            let displayName = file.endsWith('.json') ? file.slice(0, -5) : file;
+            title.innerText = displayName;
             title.className = "workflow-file-title"; // 添加类名
-            // title.style = ""; // 清除旧的inline样式
             title.onclick = () => loadFunc(fullPath); // 使用传入的加载函数
 
             // 收藏按钮 - 仅在本地工作流 Tab 显示
