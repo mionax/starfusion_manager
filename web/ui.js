@@ -6,16 +6,16 @@ app.registerExtension({
         // 注册侧边栏标签
         app.extensionManager.registerSidebarTab({
             id: 'workflow-manager',
-            icon: 'pi pi-folder',  // 使用 PrimeIcons 图标
+            icon: 'pi pi-cloud',  // 更换为云朵图标（PrimeIcons）
             title: '工作流管理器',
-            tooltip: '✨️星汇工作流管理器',
+            tooltip: '加载工作流',
             type: 'custom',
             
             render: async (el) => {
                 // 创建面板内容容器
                 const panel = document.createElement("div");
                 panel.className = "workflow-manager-panel"; // 添加类名
-                // panel.style = ` ... `; // 样式移到 CSS 中
+                panel.style = "justify-content: flex-start;"; // 保证内容顶对齐
 
                 // 添加 CSS 样式
                 const style = document.createElement("style");
@@ -89,7 +89,6 @@ app.registerExtension({
                         border-color: #8cf;
                         box-shadow: 0 0 5px rgba(136, 204, 255, 0.5);
                     }
-                    
                      .workflow-refresh-button {
                         padding: 8px 12px; /* Adjust padding to match input height */
                         cursor: pointer;
@@ -172,8 +171,50 @@ app.registerExtension({
                      .hidden-content {
                          display: none;
                      }
+                    .workflow-manager-header {
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 10px;
+                        padding: 14px 18px 18px 18px;
+                        font-size: 1.5em;
+                        font-weight: bold;
+                        color: #fff;
+                        background: linear-gradient(90deg, #3a4a6a 0%, #2a8cff 100%);
+                        border-radius: 0;
+                        box-shadow: 0 2px 8px 0 rgba(40,80,180,0.10);
+                        cursor: pointer;
+                        user-select: none;
+                        letter-spacing: 2px;
+                        margin-bottom: 10px;
+                        transition: background 0.3s;
+                    }
+                    .workflow-manager-header:hover {
+                        color: #fff;
+                        background: linear-gradient(90deg, #4a5a7a 0%, #3ab0ff 100%);
+                        box-shadow: 0 4px 16px 0 rgba(40,120,255,0.15);
+                        text-decoration: none;
+                    }
+                    .workflow-manager-header .header-icon {
+                        font-size: 1.2em;
+                        margin-right: 6px;
+                        color: #ffe066;
+                        filter: drop-shadow(0 1px 2px #0008);
+                    }
                 `;
                 el.appendChild(style); // 将样式添加到元素中
+
+                // ====== 新增：顶部标题栏 ======
+                const header = document.createElement("div");
+                header.className = "workflow-manager-header";
+                header.title = "点击访问星汇工作流云端仓库";
+                header.onclick = () => {
+                    window.open("https://github.com/StarFusionLab/comfyui-workflows", "_blank");
+                };
+                // 只保留文字，无图标
+                header.innerText = "✨️星汇工作流管理器";
+                panel.appendChild(header);
+                // ====== 标题栏结束 ======
 
                 // Tab 切换区域
                 const tabsContainer = document.createElement("div");
