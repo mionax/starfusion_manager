@@ -396,25 +396,6 @@ async function loadCloudWorkflows(container) {
 function renderFolders(data, container, loadFunc) {
     container.innerHTML = ""; // Clear container, search box handled in loadXXXFunctions
 
-    const favorites = getFavorites(); // 收藏夹仍然是本地的
-
-    // 渲染收藏夹 - 仅在本地工作流 Tab 显示
-    if (loadFunc === loadWorkflow) { // 判断是否是本地加载函数
-        const favSection = document.createElement("div");
-        favSection.className = "workflow-favorites-section"; // 添加类名
-        // favSection.style = ""; // 清除旧的inline样式
-        favSection.innerHTML = "<strong>⭐ 收藏夹</strong>";
-        favorites.forEach(path => {
-            const favItem = document.createElement("div");
-            favItem.className = "workflow-fav-item"; // 添加类名
-            // favItem.style = ""; // 清除旧的inline样式
-            favItem.innerText = path;
-            favItem.onclick = () => loadFunc(path); // 使用传入的加载函数
-            favSection.appendChild(favItem);
-        });
-        container.prepend(favSection); // 将收藏夹放到最前面
-    }
-
     data.forEach(folder => {
         const folderElem = document.createElement("div");
         folderElem.className = "workflow-folder"; // 添加类名
@@ -422,11 +403,9 @@ function renderFolders(data, container, loadFunc) {
 
         folder.files.forEach(file => {
             const fullPath = `${folder.name}/${file}`;
-            const isFav = favorites.includes(fullPath);
 
             const fileElem = document.createElement("div");
             fileElem.className = "workflow-file-item"; // 添加类名
-            // fileElem.style = ""; // 清除旧的inline样式
 
             const title = document.createElement("span");
             // 只显示文件名（去掉.json后缀）
@@ -434,16 +413,6 @@ function renderFolders(data, container, loadFunc) {
             title.innerText = displayName;
             title.className = "workflow-file-title"; // 添加类名
             title.onclick = () => loadFunc(fullPath); // 使用传入的加载函数
-
-            // 收藏按钮 - 仅在本地工作流 Tab 显示
-             if (loadFunc === loadWorkflow) {
-                const favBtn = document.createElement("span");
-                favBtn.innerText = isFav ? "★" : "☆";
-                favBtn.className = "workflow-fav-btn"; // 添加类名
-                // favBtn.style = ""; // 清除旧的inline样式
-                favBtn.onclick = () => toggleFavorite(fullPath, favBtn);
-                fileElem.appendChild(favBtn);
-             }
 
             fileElem.prepend(title); // 文件名放前面
             folderElem.appendChild(fileElem);
@@ -467,26 +436,6 @@ function filterResults(keyword, containerSelector) {
         const text = item.innerText.toLowerCase();
         item.style.display = text.includes(keyword) ? "" : "none";
     });
-}
-
-function getFavorites() {
-    try {
-        return JSON.parse(localStorage.getItem("workflow_favorites") || "[]");
-    } catch (e) {
-        return [];
-    }
-}
-
-function toggleFavorite(path, btnElem) {
-    let favs = getFavorites();
-    if (favs.includes(path)) {
-        favs = favs.filter(p => p !== path);
-        btnElem.innerText = "☆";
-    } else {
-        favs.push(path);
-        btnElem.innerText = "★";
-    }
-    localStorage.setItem("workflow_favorites", JSON.stringify(favs));
 }
 
 // 修改 loadWorkflow 函数为加载本地工作流
