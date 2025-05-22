@@ -26,6 +26,13 @@ REMOTE_WORKFLOW_BASE_PATH = cloud_config.get('workflows_base_path', '')
 # 新增：本地工作流目录可配置
 LOCAL_WORKFLOW_DIR = cloud_config.get('local_workflow_dir', None)
 
+# 新增：用户配置
+AUTH_CONFIG = cloud_config.get('auth', {})
+AUTH_ENABLED = AUTH_CONFIG.get('enabled', False)
+AUTH_APP_ID = os.getenv('AUTH_APP_ID') or AUTH_CONFIG.get('app_id', '')
+AUTH_APP_SECRET = os.getenv('AUTH_APP_SECRET') or AUTH_CONFIG.get('app_secret', '')
+AUTH_REDIRECT_URI = AUTH_CONFIG.get('redirect_uri', '')
+
 if LOCAL_WORKFLOW_DIR:
     # 如果是相对路径，转换为绝对路径（相对于当前py文件目录）
     if not os.path.isabs(LOCAL_WORKFLOW_DIR):
@@ -39,6 +46,14 @@ else:
 
 if not GITHUB_TOKEN:
     print("[工作流管理器] 警告: 未设置 GITHUB_TOKEN，云端工作流功能将无法使用。")
+
+if AUTH_ENABLED:
+    if not AUTH_APP_ID or not AUTH_APP_SECRET:
+        print("[工作流管理器] 警告: 登录功能已启用，但未设置完整的认证配置，可能无法正常工作。")
+    else:
+        print(f"[工作流管理器] 登录功能已启用，AppID: {AUTH_APP_ID}")
+else:
+    print("[工作流管理器] 登录功能未启用")
 
 github_api = GitHubAPI(GITHUB_REPO_OWNER, GITHUB_REPO_NAME, token=GITHUB_TOKEN)
 
@@ -74,6 +89,23 @@ workflow_cache = WorkflowCache()
 
 # 确保工作流目录存在
 os.makedirs(WORKFLOW_DIR, exist_ok=True)
+
+# 新增: 简单的用户token验证函数
+def validate_token(token):
+    """简单验证token是否有效（此处为示例，实际需要对接认证服务）"""
+    # 此函数目前仅作占位，后续需要实现真实的token验证
+    # 实际项目中应对接 Authing 等认证服务验证token
+    print(f"[工作流管理器] 验证用户token: {token[:10]}...")
+    if not token or token == 'invalid':
+        return None
+    
+    # 模拟返回用户信息
+    return {
+        "id": "user123",
+        "username": "demo_user",
+        "nickname": "测试用户",
+        "avatar": "https://via.placeholder.com/100"
+    }
 
 def scan_workflow_dir(base_dir):
     data = []
@@ -149,6 +181,25 @@ def scan_remote_workflow_dir(github_api_instance, base_path):
     except Exception as e:
         print(f"[工作流管理器] 扫描云端工作流目录时出错: {e}")
     return data
+
+# 新增: 获取用户专属工作流目录
+def get_user_workflows(user_id):
+    """获取用户可访问的工作流列表"""
+    # 这里应该根据用户ID查询数据库或权限系统
+    # 返回用户有权限访问的工作流列表
+    # 目前为演示，返回一些模拟数据
+    
+    # 模拟数据: 用户专属工作流
+    return [
+        {
+            "name": "我的工作流",
+            "files": ["个人工作流1.json", "个人工作流2.json"]
+        },
+        {
+            "name": "共享工作流",
+            "files": ["团队共享工作流.json", "高级工作流.json"]
+        }
+    ]
 
 async def handle_get_workflows(request):
     try:
@@ -268,6 +319,119 @@ async def handle_clear_remote_cache(request):
         print(f"[工作流管理器] 清除云端缓存时出错: {e}")
         return web.json_response({"error": str(e)}, status=500)
 
+# 新增: 用户相关API处理函数
+# 1. 获取用户信息
+async def handle_get_user_info(request):
+    try:
+        print("[工作流管理器] 收到获取用户信息请求")
+        
+        # 从请求头获取token
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+        
+        # 如果没有提供token，则模拟返回一个测试账户
+        if not token:
+            print("[工作流管理器] 未提供token，返回测试账户信息")
+            return web.json_response({
+                "id": "test_user",
+                "username": "test_user",
+                "nickname": "测试用户",
+                "avatar": "https://via.placeholder.com/100",
+                "token": "mock-token-for-testing"
+            })
+            
+        # 验证token
+        user_info = validate_token(token)
+        if not user_info:
+            print("[工作流管理器] token验证失败")
+            return web.json_response({"error": "Invalid token"}, status=401)
+            
+        # 添加token到返回结果
+        user_info['token'] = token
+        
+        print(f"[工作流管理器] 成功获取用户信息: {json.dumps(user_info, ensure_ascii=False)}")
+        return web.json_response(user_info)
+    except Exception as e:
+        print(f"[工作流管理器] 获取用户信息时出错: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+# 2. 获取用户工作流列表
+async def handle_get_user_workflows(request):
+    try:
+        print("[工作流管理器] 收到获取用户工作流列表请求")
+        
+        # 从请求头获取token
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+        
+        if not token:
+            print("[工作流管理器] 未提供token")
+            return web.json_response({"error": "Token required"}, status=401)
+            
+        # 验证token
+        user_info = validate_token(token)
+        if not user_info:
+            print("[工作流管理器] token验证失败")
+            return web.json_response({"error": "Invalid token"}, status=401)
+            
+        # 获取用户可访问的工作流列表
+        workflows = get_user_workflows(user_info.get('id'))
+        
+        print(f"[工作流管理器] 成功获取用户工作流列表: {json.dumps(workflows, ensure_ascii=False)}")
+        return web.json_response(workflows)
+    except Exception as e:
+        print(f"[工作流管理器] 获取用户工作流列表时出错: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+# 3. 获取用户特定工作流
+async def handle_get_user_workflow(request):
+    try:
+        print("[工作流管理器] 收到获取用户特定工作流请求")
+        rel_path = request.match_info['path']
+        
+        # 从请求头获取token
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+        
+        if not token:
+            print("[工作流管理器] 未提供token")
+            return web.json_response({"error": "Token required"}, status=401)
+            
+        # 验证token
+        user_info = validate_token(token)
+        if not user_info:
+            print("[工作流管理器] token验证失败")
+            return web.json_response({"error": "Invalid token"}, status=401)
+            
+        print(f"[工作流管理器] 请求用户工作流: {rel_path}")
+        
+        # 这里应该根据用户ID和路径查询数据库或权限系统
+        # 检查用户是否有权限访问该工作流
+        # 目前为演示，返回一个模拟的工作流
+        
+        mock_workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "MockNode",
+                    "name": "模拟节点",
+                    "inputs": {},
+                    "outputs": {}
+                }
+            ],
+            "connections": [],
+            "meta": {
+                "name": rel_path.split('/')[-1].replace('.json', ''),
+                "description": "这是一个模拟的用户工作流"
+            }
+        }
+        
+        print(f"[工作流管理器] 成功返回用户工作流: {rel_path}")
+        return web.json_response(mock_workflow)
+    except Exception as e:
+        print(f"[工作流管理器] 获取用户工作流时出错: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
 def setup(app):
     try:
         print("="*50)
@@ -284,6 +448,11 @@ def setup(app):
 
         # Register new route for clearing remote cache
         app.router.add_post("/workflow_manager/clear_remote_cache", handle_clear_remote_cache)
+        
+        # 注册用户相关API路由
+        app.router.add_get("/workflow_manager/user/info", handle_get_user_info)
+        app.router.add_get("/workflow_manager/user/workflows", handle_get_user_workflows)
+        app.router.add_get("/workflow_manager/user/workflows/{path:.*}", handle_get_user_workflow)
 
         print("[工作流管理器] 工作流管理器路由已注册")
         print("="*50)

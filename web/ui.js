@@ -211,6 +211,60 @@ app.registerExtension({
                         color: #ffe066;
                         filter: drop-shadow(0 1px 2px #0008);
                      }
+                     
+                    /* 登录相关样式 */
+                    .user-login-container {
+                        display: flex;
+                        align-items: center;
+                        justify-content: flex-end;
+                        padding: 8px 0;
+                        margin-bottom: 10px;
+                        flex-shrink: 0;
+                    }
+                    .login-button {
+                        background: linear-gradient(90deg, #2a8cff 0%, #3a6cff 100%);
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        padding: 8px 16px;
+                        cursor: pointer;
+                        font-weight: bold;
+                        transition: all 0.3s ease;
+                    }
+                    .login-button:hover {
+                        background: linear-gradient(90deg, #3a9cff 0%, #4a7cff 100%);
+                        box-shadow: 0 2px 8px rgba(42, 140, 255, 0.4);
+                    }
+                    .user-info {
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                    }
+                    .user-avatar {
+                        width: 32px;
+                        height: 32px;
+                        border-radius: 50%;
+                        object-fit: cover;
+                        border: 2px solid #4a90e2;
+                    }
+                    .user-name {
+                        color: white;
+                        font-weight: bold;
+                    }
+                    .logout-button {
+                        color: #ff6b6b;
+                        background: transparent;
+                        border: 1px solid #ff6b6b;
+                        border-radius: 4px;
+                        padding: 4px 8px;
+                        margin-left: 10px;
+                        cursor: pointer;
+                        font-size: 0.8em;
+                        transition: all 0.3s ease;
+                    }
+                    .logout-button:hover {
+                        background: rgba(255, 107, 107, 0.1);
+                    }
                 `;
                 el.appendChild(style); // 将样式添加到元素中
 
@@ -225,6 +279,54 @@ app.registerExtension({
                 header.innerText = "✨️星汇工作流管理器";
                 panel.appendChild(header);
                 // ====== 标题栏结束 ======
+                
+                // ====== 新增：登录区域 ======
+                const loginContainer = document.createElement("div");
+                loginContainer.className = "user-login-container";
+                
+                // 初始状态设为未登录，显示登录按钮
+                const showLoginButton = () => {
+                    loginContainer.innerHTML = '';
+                    const loginButton = document.createElement("button");
+                    loginButton.className = "login-button";
+                    loginButton.innerText = "登录";
+                    loginButton.onclick = handleLogin; // 后面会定义这个函数
+                    loginContainer.appendChild(loginButton);
+                };
+                
+                // 已登录状态，显示用户信息
+                const showUserInfo = (userInfo) => {
+                    loginContainer.innerHTML = '';
+                    const userInfoDiv = document.createElement("div");
+                    userInfoDiv.className = "user-info";
+                    
+                    // 头像
+                    if (userInfo.avatar) {
+                        const avatar = document.createElement("img");
+                        avatar.className = "user-avatar";
+                        avatar.src = userInfo.avatar;
+                        avatar.alt = "用户头像";
+                        userInfoDiv.appendChild(avatar);
+                    }
+                    
+                    // 用户名
+                    const userName = document.createElement("span");
+                    userName.className = "user-name";
+                    userName.innerText = userInfo.nickname || userInfo.username || "用户";
+                    userInfoDiv.appendChild(userName);
+                    
+                    // 退出按钮
+                    const logoutButton = document.createElement("button");
+                    logoutButton.className = "logout-button";
+                    logoutButton.innerText = "退出";
+                    logoutButton.onclick = handleLogout; // 后面会定义这个函数
+                    userInfoDiv.appendChild(logoutButton);
+                    
+                    loginContainer.appendChild(userInfoDiv);
+                };
+                
+                panel.appendChild(loginContainer);
+                // ====== 登录区域结束 ======
 
                 // Tab 切换区域
                 const tabsContainer = document.createElement("div");
@@ -240,6 +342,13 @@ app.registerExtension({
                 cloudTabBtn.className = "workflow-manager-tab-button";
                 cloudTabBtn.innerText = "☁️ 云端工作流";
                 tabsContainer.appendChild(cloudTabBtn);
+                
+                // ====== 新增：会员工作流标签 ======
+                const memberTabBtn = document.createElement("button");
+                memberTabBtn.className = "workflow-manager-tab-button";
+                memberTabBtn.innerText = "✨ 我的工作流";
+                tabsContainer.appendChild(memberTabBtn);
+                // ====== 会员工作流标签结束 ======
 
                 // 内容区域容器
                 const contentContainer = document.createElement("div");
@@ -259,6 +368,13 @@ app.registerExtension({
                 cloudContent.className = "workflow-content hidden-content"; // 默认隐藏
                  // cloudContent.style = "padding: 0 10px 20px;"; // Move to CSS class
                 contentContainer.appendChild(cloudContent);
+                
+                // ====== 新增：会员工作流内容区域 ======
+                const memberContent = document.createElement("div");
+                memberContent.id = "workflow-member-content";
+                memberContent.className = "workflow-content hidden-content"; // 默认隐藏
+                contentContainer.appendChild(memberContent);
+                // ====== 会员工作流内容区域结束 ======
 
                 // --- Controls (Search and Refresh) Container ---
                 // Create a container for search and refresh button
@@ -289,8 +405,10 @@ app.registerExtension({
                 localTabBtn.onclick = () => {
                     localTabBtn.classList.add('active');
                     cloudTabBtn.classList.remove('active');
+                    memberTabBtn.classList.remove('active'); // 新增
                     localContent.classList.remove('hidden-content');
                     cloudContent.classList.add('hidden-content');
+                    memberContent.classList.add('hidden-content'); // 新增
                     searchInput.placeholder = "搜索本地工作流..."; // Set placeholder
                     searchInput.oninput = () => filterResults(searchInput.value.toLowerCase(), '#workflow-local-content');
                     refreshButton.style.display = 'none'; // Hide refresh button
@@ -300,19 +418,206 @@ app.registerExtension({
                 cloudTabBtn.onclick = () => {
                     cloudTabBtn.classList.add('active');
                     localTabBtn.classList.remove('active');
+                    memberTabBtn.classList.remove('active'); // 新增
                     cloudContent.classList.remove('hidden-content');
                     localContent.classList.add('hidden-content');
+                    memberContent.classList.add('hidden-content'); // 新增
                      searchInput.placeholder = "搜索云端工作流..."; // Set placeholder
                     searchInput.oninput = () => filterResults(searchInput.value.toLowerCase(), '#workflow-cloud-content');
                     refreshButton.style.display = ''; // Show refresh button
                     loadCloudWorkflows(cloudContent); // Load cloud
                 };
 
+                // ====== 新增：会员工作流标签切换逻辑 ======
+                memberTabBtn.onclick = () => {
+                    // 检查是否已登录
+                    if (!isUserLoggedIn()) {
+                        alert("请先登录以访问您的专属工作流");
+                        return;
+                    }
+                    
+                    memberTabBtn.classList.add('active');
+                    localTabBtn.classList.remove('active');
+                    cloudTabBtn.classList.remove('active');
+                    memberContent.classList.remove('hidden-content');
+                    localContent.classList.add('hidden-content');
+                    cloudContent.classList.add('hidden-content');
+                    searchInput.placeholder = "搜索我的工作流...";
+                    searchInput.oninput = () => filterResults(searchInput.value.toLowerCase(), '#workflow-member-content');
+                    refreshButton.style.display = '';
+                    refreshButton.onclick = () => loadMemberWorkflows(memberContent);
+                    loadMemberWorkflows(memberContent);
+                };
+                // ====== 会员工作流标签切换逻辑结束 ======
 
                 // 初始加载本地工作流并设置初始状态
                 searchInput.placeholder = "搜索本地工作流...";
                 searchInput.oninput = () => filterResults(searchInput.value.toLowerCase(), '#workflow-local-content');
                 loadLocalWorkflows(localContent);
+                
+                // ====== 新增：登录相关函数 ======
+                // 检查用户是否已登录
+                function isUserLoggedIn() {
+                    return localStorage.getItem('userToken') !== null;
+                }
+                
+                // 处理登录操作
+                async function handleLogin() {
+                    try {
+                        console.log("[工作流管理器] 开始登录流程...");
+                        // 这里后续会集成 Authing SDK
+                        // 目前只做一个简单模拟，实际需要集成真实登录
+                        
+                        // 临时模拟：直接获取用户信息
+                        const response = await fetch("/workflow_manager/user/info", {
+                            method: "GET",
+                            headers: {
+                                "Content-Type": "application/json"
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            if (response.status === 404) {
+                                alert("登录功能尚未完全实现，请稍后再试");
+                                return;
+                            }
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        const userInfo = await response.json();
+                        
+                        // 保存用户信息和token
+                        localStorage.setItem('userToken', userInfo.token || 'mock-token');
+                        localStorage.setItem('userInfo', JSON.stringify(userInfo));
+                        
+                        // 更新UI显示用户信息
+                        showUserInfo(userInfo);
+                        
+                        console.log("[工作流管理器] 登录成功:", userInfo);
+                    } catch (error) {
+                        console.error("[工作流管理器] 登录失败:", error);
+                        alert("登录失败，请稍后重试");
+                    }
+                }
+                
+                // 处理退出登录
+                function handleLogout() {
+                    // 清除本地存储的用户信息
+                    localStorage.removeItem('userToken');
+                    localStorage.removeItem('userInfo');
+                    
+                    // 恢复为登录按钮
+                    showLoginButton();
+                    
+                    // 如果当前在会员工作流页面，自动切换回本地工作流
+                    if (memberTabBtn.classList.contains('active')) {
+                        localTabBtn.click();
+                    }
+                    
+                    console.log("[工作流管理器] 已退出登录");
+                }
+                
+                // 加载会员专属工作流
+                async function loadMemberWorkflows(container) {
+                    let contentListDiv = container.querySelector('.workflow-content-list');
+                    if (!contentListDiv) {
+                        contentListDiv = document.createElement("div");
+                        contentListDiv.className = "workflow-content-list";
+                        container.appendChild(contentListDiv);
+                    }
+                    contentListDiv.innerHTML = ''; // 清空内容
+                    
+                    try {
+                        const token = localStorage.getItem('userToken');
+                        if (!token) {
+                            throw new Error("未登录");
+                        }
+                        
+                        const response = await fetch("/workflow_manager/user/workflows", {
+                            method: "GET",
+                            headers: {
+                                "Authorization": `Bearer ${token}`,
+                                "Content-Type": "application/json"
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            if (response.status === 404) {
+                                const messageDiv = document.createElement("div");
+                                messageDiv.style = "color: orange;";
+                                messageDiv.innerText = "会员工作流功能正在开发中或接口未找到。";
+                                contentListDiv.appendChild(messageDiv);
+                                return;
+                            }
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        const data = await response.json();
+                        renderFolders(data, contentListDiv, loadMemberWorkflow);
+                    } catch (error) {
+                        console.error("[工作流管理器] 获取会员工作流列表失败:", error);
+                        const errorDiv = document.createElement("div");
+                        errorDiv.style = "color: red;";
+                        errorDiv.innerText = "获取会员工作流列表失败: " + error.message;
+                        contentListDiv.appendChild(errorDiv);
+                    }
+                }
+                
+                // 加载会员工作流
+                async function loadMemberWorkflow(relPath) {
+                    console.log("[工作流管理器] 开始加载会员工作流:", relPath);
+                    try {
+                        const token = localStorage.getItem('userToken');
+                        if (!token) {
+                            throw new Error("未登录");
+                        }
+                        
+                        const response = await fetch(`/workflow_manager/user/workflows/${relPath}`, {
+                            method: "GET",
+                            headers: {
+                                "Authorization": `Bearer ${token}`,
+                                "Content-Type": "application/json"
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        const json = await response.json();
+                        console.log("[工作流管理器] 会员工作流加载成功:", json);
+                        app.loadGraphData(json);
+                        alert("已加载会员工作流：" + relPath);
+                    } catch (error) {
+                        console.error("[工作流管理器] 加载会员工作流失败:", error);
+                        alert("加载会员工作流失败：" + error.message);
+                    }
+                }
+                
+                // 检查并初始化用户登录状态
+                function initUserLoginState() {
+                    if (isUserLoggedIn()) {
+                        // 从本地存储获取用户信息
+                        const userInfoStr = localStorage.getItem('userInfo');
+                        if (userInfoStr) {
+                            try {
+                                const userInfo = JSON.parse(userInfoStr);
+                                showUserInfo(userInfo);
+                            } catch (e) {
+                                console.error("[工作流管理器] 解析用户信息失败:", e);
+                                showLoginButton();
+                            }
+                        } else {
+                            showLoginButton();
+                        }
+                    } else {
+                        showLoginButton();
+                    }
+                }
+                
+                // 初始化登录状态
+                initUserLoginState();
+                // ====== 登录相关函数结束 ======
 
                 el.appendChild(panel);
             }
