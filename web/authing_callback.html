@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录回调处理</title>
+  <script src="https://cdn.authing.co/packages/guard/5.2.0/guard.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background-color: #2a2a2a;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+    .loading {
+      text-align: center;
+    }
+    .loading h2 {
+      margin-bottom: 20px;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      margin: 0 auto;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .error {
+      color: #ff6b6b;
+      margin-top: 20px;
+      text-align: center;
+    }
+    .back-button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .back-button:hover {
+      background-color: #3a80d2;
+    }
+  </style>
+</head>
+<body>
+  <div class="loading">
+    <h2>处理登录信息中...</h2>
+    <div class="spinner"></div>
+    <div id="errorMessage" class="error" style="display: none;"></div>
+    <button id="backButton" class="back-button" style="display: none;" onclick="goHome()">返回首页</button>
+  </div>
+
+  <script>
+    // 返回首页
+    function goHome() {
+      window.location.href = '/';
+    }
+    
+    // 显示错误信息
+    function showError(message) {
+      const errorElement = document.getElementById('errorMessage');
+      errorElement.textContent = message;
+      errorElement.style.display = 'block';
+      
+      document.getElementById('backButton').style.display = 'inline-block';
+      
+      document.querySelector('.spinner').style.display = 'none';
+      document.querySelector('h2').textContent = '登录处理失败';
+    }
+    
+    const appId = '682f21a28c586cf53b6d7dc1';
+    
+    // 处理回调
+    async function handleCallback() {
+      try {
+        // 创建Guard实例
+        const guard = new GuardFactory.Guard({
+          appId: appId,
+          host: {
+            user: 'https://starfusion.authing.cn',
+            oauth: 'https://starfusion.authing.cn'
+          }
+        });
+        
+        // 1. 尝试处理回调
+        try {
+          await guard.handleRedirectCallback();
+        } catch (e) {
+          console.warn('处理回调失败，可能不是SSO跳转：', e);
+          // 如果处理回调失败，不一定是错误，可能是直接打开了回调页面
+        }
+        
+        // 2. 检查登录状态
+        const loginStatus = await guard.checkLoginStatus();
+        
+        if (!loginStatus) {
+          console.error('登录状态获取失败');
+          showError('登录状态获取失败，请重新登录');
+          return;
+        }
+        
+        // 3. 获取用户信息
+        const userInfo = await guard.trackSession();
+        console.log('获取到用户信息:', userInfo);
+        
+        if (!userInfo || !userInfo.token) {
+          showError('获取用户信息失败，请重新登录');
+          return;
+        }
+        
+        // 4. 保存用户信息到本地存储
+        localStorage.setItem('userToken', userInfo.token);
+        localStorage.setItem('userInfo', JSON.stringify(userInfo));
+        
+        // 5. 延迟一下再跳转，确保数据保存完成
+        setTimeout(() => {
+          // 重定向回主应用
+          window.location.href = '/';
+        }, 500);
+      } catch (error) {
+        console.error('处理回调失败:', error);
+        showError('登录处理失败: ' + (error.message || '未知错误'));
+      }
+    }
+    
+    // 页面加载完成后处理回调
+    window.onload = handleCallback;
+  </script>
+</body>
+</html> 

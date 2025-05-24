@@ -6,6 +6,10 @@ from server import PromptServer
 import requests # Added for completeness, though github_api uses it
 from dotenv import load_dotenv # Import load_dotenv
 from .github_api import GitHubAPI # Import GitHubAPI from the new file
+from .authing_auth import validate_token  # 导入Authing验证函数
+from authing.v2.authentication import AuthenticationClient, AuthenticationClientOptions
+import logging
+import time
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -32,6 +36,7 @@ AUTH_ENABLED = AUTH_CONFIG.get('enabled', False)
 AUTH_APP_ID = os.getenv('AUTH_APP_ID') or AUTH_CONFIG.get('app_id', '')
 AUTH_APP_SECRET = os.getenv('AUTH_APP_SECRET') or AUTH_CONFIG.get('app_secret', '')
 AUTH_REDIRECT_URI = AUTH_CONFIG.get('redirect_uri', '')
+APP_HOST = os.getenv('AUTH_APP_HOST') or AUTH_CONFIG.get('app_host', 'https://starfusion.authing.cn')
 
 if LOCAL_WORKFLOW_DIR:
     # 如果是相对路径，转换为绝对路径（相对于当前py文件目录）
@@ -58,8 +63,6 @@ else:
 github_api = GitHubAPI(GITHUB_REPO_OWNER, GITHUB_REPO_NAME, token=GITHUB_TOKEN)
 
 # Define a simple cache for workflow data
-import time
-
 class WorkflowCache:
     def __init__(self, expire_time=3600): # Cache expires after 3600 seconds (1 hour)
         self.cache = {}
@@ -90,22 +93,44 @@ workflow_cache = WorkflowCache()
 # 确保工作流目录存在
 os.makedirs(WORKFLOW_DIR, exist_ok=True)
 
-# 新增: 简单的用户token验证函数
-def validate_token(token):
-    """简单验证token是否有效（此处为示例，实际需要对接认证服务）"""
-    # 此函数目前仅作占位，后续需要实现真实的token验证
-    # 实际项目中应对接 Authing 等认证服务验证token
-    print(f"[工作流管理器] 验证用户token: {token[:10]}...")
-    if not token or token == 'invalid':
-        return None
+# 使用新的Authing验证函数
+def validate_user_token(token):
+    """
+    验证用户Token并返回用户信息
     
-    # 模拟返回用户信息
-    return {
-        "id": "user123",
-        "username": "demo_user",
-        "nickname": "测试用户",
-        "avatar": "https://via.placeholder.com/100"
-    }
+    Args:
+        token: 用户Token
+        
+    Returns:
+        用户信息dict或None(验证失败)
+    """
+    print(f"[工作流管理器] 验证用户token: {token[:10] if token and len(token) > 10 else 'None or short token'}...")
+    
+    # 检查是否是模拟token
+    if token and token.startswith('mock_token_'):
+        print("[工作流管理器] 检测到模拟token，返回模拟用户数据")
+        # 从本地存储获取用户数据
+        return {
+            "id": "mock_user",
+            "username": "模拟用户",
+            "nickname": "模拟用户",
+            "avatar": "https://via.placeholder.com/100/3a80d2/ffffff?text=M",
+            "is_mock": True
+        }
+    
+    # 如果认证功能未启用，返回模拟用户数据
+    if not AUTH_ENABLED:
+        print("[工作流管理器] 认证功能未启用，返回模拟用户数据")
+        return {
+            "id": "test_user",
+            "username": "test_user",
+            "nickname": "测试用户",
+            "avatar": "https://via.placeholder.com/100",
+            "is_mock": True
+        }
+    
+    # 调用Authing验证函数
+    return validate_token(token)
 
 def scan_workflow_dir(base_dir):
     data = []
@@ -329,24 +354,22 @@ async def handle_get_user_info(request):
         auth_header = request.headers.get('Authorization', '')
         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
         
-        # 如果没有提供token，则模拟返回一个测试账户
+        # 如果没有提供token，则返回匿名用户状态
         if not token:
-            print("[工作流管理器] 未提供token，返回测试账户信息")
+            print("[工作流管理器] 未提供token，返回匿名用户状态")
             return web.json_response({
-                "id": "test_user",
-                "username": "test_user",
-                "nickname": "测试用户",
-                "avatar": "https://via.placeholder.com/100",
-                "token": "mock-token-for-testing"
+                "authenticated": False,
+                "message": "未登录状态"
             })
             
         # 验证token
-        user_info = validate_token(token)
+        user_info = validate_user_token(token)
         if not user_info:
             print("[工作流管理器] token验证失败")
             return web.json_response({"error": "Invalid token"}, status=401)
             
-        # 添加token到返回结果
+        # 添加认证状态到返回结果
+        user_info['authenticated'] = True
         user_info['token'] = token
         
         print(f"[工作流管理器] 成功获取用户信息: {json.dumps(user_info, ensure_ascii=False)}")
@@ -369,7 +392,7 @@ async def handle_get_user_workflows(request):
             return web.json_response({"error": "Token required"}, status=401)
             
         # 验证token
-        user_info = validate_token(token)
+        user_info = validate_user_token(token)
         if not user_info:
             print("[工作流管理器] token验证失败")
             return web.json_response({"error": "Invalid token"}, status=401)
@@ -398,7 +421,7 @@ async def handle_get_user_workflow(request):
             return web.json_response({"error": "Token required"}, status=401)
             
         # 验证token
-        user_info = validate_token(token)
+        user_info = validate_user_token(token)
         if not user_info:
             print("[工作流管理器] token验证失败")
             return web.json_response({"error": "Invalid token"}, status=401)
@@ -432,6 +455,91 @@ async def handle_get_user_workflow(request):
         print(f"[工作流管理器] 获取用户工作流时出错: {e}")
         return web.json_response({"error": str(e)}, status=500)
 
+# 新增: 处理Authing登录回调
+async def handle_authing_callback(request):
+    try:
+        print("[工作流管理器] 收到Authing回调请求")
+        # 这里处理回调，如果需要在服务端处理的话
+        # 实际上大部分处理都在前端authing_callback.html中完成了
+        return web.json_response({
+            "status": "success",
+            "message": "登录回调成功"
+        })
+    except Exception as e:
+        print(f"[工作流管理器] 处理Authing回调时出错: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+# 新增: 处理用户登录API
+async def handle_auth_login(request):
+    try:
+        print("[工作流管理器] 收到用户登录请求")
+        # 获取用户名和密码
+        data = await request.json()
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return web.json_response({
+                "error": "Missing username or password",
+                "message": "请提供用户名和密码"
+            }, status=400)
+        
+        # 使用Authing API验证登录
+        print(f"[工作流管理器] 尝试使用Authing验证用户: {username}")
+        
+        try:
+            if not AUTH_ENABLED:
+                print("[工作流管理器] 认证功能未启用，返回模拟登录结果")
+                # 认证功能未启用，返回模拟登录结果
+                mock_user = {
+                    "id": f"mock_{username}",
+                    "username": username,
+                    "nickname": username,
+                    "photo": f"https://via.placeholder.com/100/3a80d2/ffffff?text={username[0].upper()}",
+                    "token": f"mock_token_{username}_{int(time.time())}",
+                    "is_mock": True
+                }
+                return web.json_response(mock_user)
+            
+            # 初始化Authing客户端
+            try:
+                # 使用参考代码中的方式创建Authing客户端
+                auth_client = AuthenticationClient(
+                    options=AuthenticationClientOptions(
+                        app_id=AUTH_APP_ID,
+                        app_host=APP_HOST,
+                    )
+                )
+                
+                # 使用用户名密码登录
+                user = auth_client.login_by_username(
+                    username=username, 
+                    password=password
+                )
+                
+                print(f"[工作流管理器] Authing登录成功: {user.get('id')}")
+                
+                # 返回登录结果
+                return web.json_response(user)
+            except Exception as auth_error:
+                print(f"[工作流管理器] Authing登录失败: {auth_error}")
+                return web.json_response({
+                    "error": "Login failed",
+                    "message": f"登录失败: {str(auth_error)}" 
+                }, status=401)
+        except Exception as e:
+            print(f"[工作流管理器] 处理登录请求时出错: {e}")
+            return web.json_response({
+                "error": "Internal server error",
+                "message": "服务器内部错误，请稍后重试"
+            }, status=500)
+    except Exception as e:
+        print(f"[工作流管理器] 登录API处理失败: {e}")
+        return web.json_response({
+            "error": str(e),
+            "message": "请求处理失败"
+        }, status=500)
+
 def setup(app):
     try:
         print("="*50)
@@ -453,6 +561,13 @@ def setup(app):
         app.router.add_get("/workflow_manager/user/info", handle_get_user_info)
         app.router.add_get("/workflow_manager/user/workflows", handle_get_user_workflows)
         app.router.add_get("/workflow_manager/user/workflows/{path:.*}", handle_get_user_workflow)
+        
+        # 注册Authing回调处理路由
+        app.router.add_get("/workflow_manager/auth/callback", handle_authing_callback)
+        app.router.add_post("/workflow_manager/auth/callback", handle_authing_callback)
+        
+        # 注册登录API路由
+        app.router.add_post("/workflow_manager/auth/login", handle_auth_login)
 
         print("[工作流管理器] 工作流管理器路由已注册")
         print("="*50)

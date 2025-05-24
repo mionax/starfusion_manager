@@ -1,4 +1,5 @@
 import { app } from "../../scripts/app.js";
+import AuthingConfig from "./authing_config.js";
 
 app.registerExtension({
     name: "ComfyUI.WorkflowManager",
@@ -290,7 +291,7 @@ app.registerExtension({
                     const loginButton = document.createElement("button");
                     loginButton.className = "login-button";
                     loginButton.innerText = "登录";
-                    loginButton.onclick = handleLogin; // 后面会定义这个函数
+                    loginButton.onclick = handleLogin; // 使用修改后的登录函数
                     loginContainer.appendChild(loginButton);
                 };
                 
@@ -300,26 +301,25 @@ app.registerExtension({
                     const userInfoDiv = document.createElement("div");
                     userInfoDiv.className = "user-info";
                     
-                    // 头像
-                    if (userInfo.avatar) {
-                        const avatar = document.createElement("img");
-                        avatar.className = "user-avatar";
-                        avatar.src = userInfo.avatar;
-                        avatar.alt = "用户头像";
-                        userInfoDiv.appendChild(avatar);
-                    }
+                    // 头像 - 从Authing用户信息中获取photo字段
+                    const avatarUrl = userInfo.photo || userInfo.picture || userInfo.avatar || "https://files.authing.co/authing-console/default-user-avatar.png";
+                    const avatar = document.createElement("img");
+                    avatar.className = "user-avatar";
+                    avatar.src = avatarUrl;
+                    avatar.alt = "用户头像";
+                    userInfoDiv.appendChild(avatar);
                     
-                    // 用户名
+                    // 用户名 - 优先使用nickname，其次是username
                     const userName = document.createElement("span");
                     userName.className = "user-name";
-                    userName.innerText = userInfo.nickname || userInfo.username || "用户";
+                    userName.innerText = userInfo.nickname || userInfo.username || userInfo.name || "用户";
                     userInfoDiv.appendChild(userName);
                     
                     // 退出按钮
                     const logoutButton = document.createElement("button");
                     logoutButton.className = "logout-button";
                     logoutButton.innerText = "退出";
-                    logoutButton.onclick = handleLogout; // 后面会定义这个函数
+                    logoutButton.onclick = handleLogout;
                     userInfoDiv.appendChild(logoutButton);
                     
                     loginContainer.appendChild(userInfoDiv);
@@ -458,53 +458,191 @@ app.registerExtension({
                 // ====== 新增：登录相关函数 ======
                 // 检查用户是否已登录
                 function isUserLoggedIn() {
-                    return localStorage.getItem('userToken') !== null;
+                    return localStorage.getItem(AuthingConfig.tokenLocalStorageKey) !== null;
                 }
                 
                 // 处理登录操作
                 async function handleLogin() {
                     try {
-                        console.log("[工作流管理器] 开始登录流程...");
-                        // 这里后续会集成 Authing SDK
-                        // 目前只做一个简单模拟，实际需要集成真实登录
+                        console.log("[工作流管理器] 开始Authing登录流程...");
                         
-                        // 临时模拟：直接获取用户信息
-                        const response = await fetch("/workflow_manager/user/info", {
-                            method: "GET",
-                            headers: {
-                                "Content-Type": "application/json"
-                            }
-                        });
+                        // 创建一个模态对话框来显示简化的登录表单
+                        const modalContainer = document.createElement('div');
+                        modalContainer.className = 'auth-modal-container';
+                        modalContainer.style.cssText = `
+                            position: fixed;
+                            top: 0;
+                            left: 0;
+                            width: 100%;
+                            height: 100%;
+                            background-color: rgba(0, 0, 0, 0.7);
+                            z-index: 9999;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        `;
                         
-                        if (!response.ok) {
-                            if (response.status === 404) {
-                                alert("登录功能尚未完全实现，请稍后再试");
-                                return;
+                        // 创建模态内容容器
+                        const modalContent = document.createElement('div');
+                        modalContent.className = 'auth-modal-content';
+                        modalContent.style.cssText = `
+                            background-color: #2a2a2a;
+                            width: 450px;
+                            max-width: 90%;
+                            border-radius: 8px;
+                            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+                            position: relative;
+                            padding: 20px;
+                            color: white;
+                        `;
+                        
+                        // 添加关闭按钮
+                        const closeBtn = document.createElement('div');
+                        closeBtn.className = 'auth-modal-close';
+                        closeBtn.innerHTML = '&times;';
+                        closeBtn.style.cssText = `
+                            position: absolute;
+                            top: 10px;
+                            right: 15px;
+                            font-size: 24px;
+                            cursor: pointer;
+                            color: #aaa;
+                        `;
+                        closeBtn.onclick = () => {
+                            document.body.removeChild(modalContainer);
+                        };
+                        
+                        // 添加标题
+                        const title = document.createElement('h2');
+                        title.textContent = '✨ 星汇工作流 - 用户登录';
+                        title.style.cssText = `
+                            margin-top: 5px;
+                            margin-bottom: 20px;
+                            text-align: center;
+                            color: white;
+                        `;
+                        
+                        // 创建一个简化的登录表单，避免使用Authing Guard
+                        const loginFormContainer = document.createElement('div');
+                        loginFormContainer.style.cssText = `
+                            padding: 20px;
+                            display: flex;
+                            flex-direction: column;
+                            gap: 15px;
+                        `;
+                        
+                        loginFormContainer.innerHTML = `
+                            <div style="margin-bottom: 10px; text-align: center;">
+                                <p>请输入您的用户名和密码登录</p>
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 5px; color: #ccc;">用户名</label>
+                                <input id="username-input" type="text" style="width: 100%; padding: 8px; border-radius: 4px; background: #333; border: 1px solid #555; color: white;" placeholder="请输入用户名">
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 5px; color: #ccc;">密码</label>
+                                <input id="password-input" type="password" style="width: 100%; padding: 8px; border-radius: 4px; background: #333; border: 1px solid #555; color: white;" placeholder="请输入密码">
+                            </div>
+                            <button id="login-btn" style="padding: 10px; background: linear-gradient(90deg, #2a8cff 0%, #3a6cff 100%); border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">登录</button>
+                            <div id="login-error" style="color: #ff6b6b; text-align: center; display: none; margin-top: 10px;"></div>
+                            <div style="margin-top: 15px; text-align: center; font-size: 0.9em; color: #aaa;">
+                                * 目前使用简化登录表单。如需注册，请联系管理员。
+                            </div>
+                        `;
+                        
+                        // 添加所有元素到模态框
+                        modalContent.appendChild(closeBtn);
+                        modalContent.appendChild(title);
+                        modalContent.appendChild(loginFormContainer);
+                        modalContainer.appendChild(modalContent);
+                        
+                        // 添加模态框到body
+                        document.body.appendChild(modalContainer);
+                        
+                        // 为登录按钮添加事件处理
+                        const loginBtn = document.getElementById('login-btn');
+                        const usernameInput = document.getElementById('username-input');
+                        const passwordInput = document.getElementById('password-input');
+                        const errorElement = document.getElementById('login-error');
+                        
+                        loginBtn.onclick = async () => {
+                            try {
+                                const username = usernameInput.value.trim();
+                                const password = passwordInput.value.trim();
+                                
+                                if (!username) {
+                                    showLoginError('请输入用户名');
+                                    return;
+                                }
+                                
+                                if (!password) {
+                                    showLoginError('请输入密码');
+                                    return;
+                                }
+                                
+                                // 显示加载状态
+                                loginBtn.textContent = '登录中...';
+                                loginBtn.disabled = true;
+                                
+                                // 调用后端API进行登录验证
+                                const response = await fetch('/workflow_manager/auth/login', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        username,
+                                        password
+                                    })
+                                });
+                                
+                                if (!response.ok) {
+                                    const errorData = await response.json();
+                                    throw new Error(errorData.message || '登录失败，请检查用户名和密码');
+                                }
+                                
+                                const user = await response.json();
+                                
+                                // 保存用户信息到本地存储
+                                localStorage.setItem(AuthingConfig.tokenLocalStorageKey, user.token);
+                                localStorage.setItem(AuthingConfig.userInfoLocalStorageKey, JSON.stringify(user));
+                                
+                                // 更新UI显示用户信息
+                                showUserInfo(user);
+                                
+                                // 关闭模态框
+                                document.body.removeChild(modalContainer);
+                                
+                                // 重新加载会员工作流（如果在会员标签页）
+                                if (memberTabBtn && memberTabBtn.classList.contains('active')) {
+                                    loadMemberWorkflows(memberContent);
+                                }
+                                
+                                console.log('[工作流管理器] 登录成功:', user);
+                            } catch (error) {
+                                console.error('[工作流管理器] 登录失败:', error);
+                                showLoginError('登录失败: ' + (error.message || '未知错误'));
+                                loginBtn.textContent = '登录';
+                                loginBtn.disabled = false;
                             }
-                            throw new Error(`HTTP error! status: ${response.status}`);
+                        };
+                        
+                        // 显示登录错误信息
+                        function showLoginError(message) {
+                            errorElement.textContent = message;
+                            errorElement.style.display = 'block';
                         }
-                        
-                        const userInfo = await response.json();
-                        
-                        // 保存用户信息和token
-                        localStorage.setItem('userToken', userInfo.token || 'mock-token');
-                        localStorage.setItem('userInfo', JSON.stringify(userInfo));
-                        
-                        // 更新UI显示用户信息
-                        showUserInfo(userInfo);
-                        
-                        console.log("[工作流管理器] 登录成功:", userInfo);
                     } catch (error) {
-                        console.error("[工作流管理器] 登录失败:", error);
-                        alert("登录失败，请稍后重试");
+                        console.error("[工作流管理器] 创建登录界面失败:", error);
+                        alert("创建登录界面失败，请稍后重试");
                     }
                 }
                 
                 // 处理退出登录
                 function handleLogout() {
                     // 清除本地存储的用户信息
-                    localStorage.removeItem('userToken');
-                    localStorage.removeItem('userInfo');
+                    localStorage.removeItem(AuthingConfig.tokenLocalStorageKey);
+                    localStorage.removeItem(AuthingConfig.userInfoLocalStorageKey);
                     
                     // 恢复为登录按钮
                     showLoginButton();
@@ -598,11 +736,28 @@ app.registerExtension({
                 function initUserLoginState() {
                     if (isUserLoggedIn()) {
                         // 从本地存储获取用户信息
-                        const userInfoStr = localStorage.getItem('userInfo');
+                        const userInfoStr = localStorage.getItem(AuthingConfig.userInfoLocalStorageKey);
                         if (userInfoStr) {
                             try {
                                 const userInfo = JSON.parse(userInfoStr);
+                                console.log('[工作流管理器] 从本地存储加载用户信息:', userInfo);
                                 showUserInfo(userInfo);
+                                
+                                // 验证token是否有效
+                                fetch('/workflow_manager/user/info', {
+                                    headers: {
+                                        'Authorization': `Bearer ${localStorage.getItem(AuthingConfig.tokenLocalStorageKey)}`
+                                    }
+                                })
+                                .then(response => {
+                                    if (!response.ok) {
+                                        console.warn('[工作流管理器] 用户token已失效，需要重新登录');
+                                        handleLogout();
+                                    }
+                                })
+                                .catch(err => {
+                                    console.error('[工作流管理器] 验证token出错:', err);
+                                });
                             } catch (e) {
                                 console.error("[工作流管理器] 解析用户信息失败:", e);
                                 showLoginButton();
