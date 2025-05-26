@@ -343,13 +343,6 @@ app.registerExtension({
                 cloudTabBtn.innerText = "☁️ 云端工作流";
                 tabsContainer.appendChild(cloudTabBtn);
                 
-                // ====== 新增：会员工作流标签 ======
-                const memberTabBtn = document.createElement("button");
-                memberTabBtn.className = "workflow-manager-tab-button";
-                memberTabBtn.innerText = "✨ 我的工作流";
-                tabsContainer.appendChild(memberTabBtn);
-                // ====== 会员工作流标签结束 ======
-
                 // 内容区域容器
                 const contentContainer = document.createElement("div");
                 contentContainer.className = "workflow-manager-content-container";
@@ -369,13 +362,6 @@ app.registerExtension({
                  // cloudContent.style = "padding: 0 10px 20px;"; // Move to CSS class
                 contentContainer.appendChild(cloudContent);
                 
-                // ====== 新增：会员工作流内容区域 ======
-                const memberContent = document.createElement("div");
-                memberContent.id = "workflow-member-content";
-                memberContent.className = "workflow-content hidden-content"; // 默认隐藏
-                contentContainer.appendChild(memberContent);
-                // ====== 会员工作流内容区域结束 ======
-
                 // --- Controls (Search and Refresh) Container ---
                 // Create a container for search and refresh button
                 const controlsContainer = document.createElement("div");
@@ -405,10 +391,8 @@ app.registerExtension({
                 localTabBtn.onclick = () => {
                     localTabBtn.classList.add('active');
                     cloudTabBtn.classList.remove('active');
-                    memberTabBtn.classList.remove('active'); // 新增
                     localContent.classList.remove('hidden-content');
                     cloudContent.classList.add('hidden-content');
-                    memberContent.classList.add('hidden-content'); // 新增
                     searchInput.placeholder = "搜索本地工作流..."; // Set placeholder
                     searchInput.oninput = () => filterResults(searchInput.value.toLowerCase(), '#workflow-local-content');
                     refreshButton.style.display = 'none'; // Hide refresh button
@@ -416,39 +400,23 @@ app.registerExtension({
                 };
 
                 cloudTabBtn.onclick = () => {
+                    // 检查是否已登录
+                    if (!isUserLoggedIn()) {
+                        alert("请先登录以访问云端工作流");
+                        // 提示登录
+                        handleLogin();
+                        return;
+                    }
+                    
                     cloudTabBtn.classList.add('active');
                     localTabBtn.classList.remove('active');
-                    memberTabBtn.classList.remove('active'); // 新增
                     cloudContent.classList.remove('hidden-content');
                     localContent.classList.add('hidden-content');
-                    memberContent.classList.add('hidden-content'); // 新增
-                     searchInput.placeholder = "搜索云端工作流..."; // Set placeholder
+                    searchInput.placeholder = "搜索云端工作流..."; // Set placeholder
                     searchInput.oninput = () => filterResults(searchInput.value.toLowerCase(), '#workflow-cloud-content');
                     refreshButton.style.display = ''; // Show refresh button
                     loadCloudWorkflows(cloudContent); // Load cloud
                 };
-
-                // ====== 新增：会员工作流标签切换逻辑 ======
-                memberTabBtn.onclick = () => {
-                    // 检查是否已登录
-                    if (!isUserLoggedIn()) {
-                        alert("请先登录以访问您的专属工作流");
-                        return;
-                    }
-                    
-                    memberTabBtn.classList.add('active');
-                    localTabBtn.classList.remove('active');
-                    cloudTabBtn.classList.remove('active');
-                    memberContent.classList.remove('hidden-content');
-                    localContent.classList.add('hidden-content');
-                    cloudContent.classList.add('hidden-content');
-                    searchInput.placeholder = "搜索我的工作流...";
-                    searchInput.oninput = () => filterResults(searchInput.value.toLowerCase(), '#workflow-member-content');
-                    refreshButton.style.display = '';
-                    refreshButton.onclick = () => loadMemberWorkflows(memberContent);
-                    loadMemberWorkflows(memberContent);
-                };
-                // ====== 会员工作流标签切换逻辑结束 ======
 
                 // 初始加载本地工作流并设置初始状态
                 searchInput.placeholder = "搜索本地工作流...";
@@ -464,7 +432,7 @@ app.registerExtension({
                 // 处理登录操作
                 async function handleLogin() {
                     try {
-                        console.log("[工作流管理器] 开始Authing登录流程...");
+                        console.log("[工作流管理器] 开始登录/注册流程...");
                         
                         // 创建一个模态对话框来显示简化的登录表单
                         const modalContainer = document.createElement('div');
@@ -512,80 +480,202 @@ app.registerExtension({
                             document.body.removeChild(modalContainer);
                         };
                         
-                        // 添加标题
+                        // 添加标题和表单容器，使用变量以便根据模式切换
                         const title = document.createElement('h2');
-                        title.textContent = '✨ 星汇工作流 - 用户登录';
                         title.style.cssText = `
                             margin-top: 5px;
-                            margin-bottom: 20px;
+                            margin-bottom: 10px;
                             text-align: center;
                             color: white;
                         `;
                         
-                        // 创建一个简化的登录表单，避免使用Authing Guard
-                        const loginFormContainer = document.createElement('div');
-                        loginFormContainer.style.cssText = `
-                            padding: 20px;
+                        const formContainer = document.createElement('div');
+                        formContainer.style.cssText = `
+                            padding: 0 20px;
                             display: flex;
                             flex-direction: column;
                             gap: 15px;
                         `;
                         
-                        loginFormContainer.innerHTML = `
-                            <div style="margin-bottom: 10px; text-align: center;">
-                                <p>请输入您的用户名和密码登录</p>
-                            </div>
-                            <div style="margin-bottom: 15px;">
-                                <label style="display: block; margin-bottom: 5px; color: #ccc;">用户名</label>
-                                <input id="username-input" type="text" style="width: 100%; padding: 8px; border-radius: 4px; background: #333; border: 1px solid #555; color: white;" placeholder="请输入用户名">
-                            </div>
-                            <div style="margin-bottom: 15px;">
-                                <label style="display: block; margin-bottom: 5px; color: #ccc;">密码</label>
-                                <input id="password-input" type="password" style="width: 100%; padding: 8px; border-radius: 4px; background: #333; border: 1px solid #555; color: white;" placeholder="请输入密码">
-                            </div>
-                            <button id="login-btn" style="padding: 10px; background: linear-gradient(90deg, #2a8cff 0%, #3a6cff 100%); border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">登录</button>
-                            <div id="login-error" style="color: #ff6b6b; text-align: center; display: none; margin-top: 10px;"></div>
-                            <div style="margin-top: 15px; text-align: center; font-size: 0.9em; color: #aaa;">
-                                * 目前使用简化登录表单。如需注册，请联系管理员。
-                            </div>
+                        // 添加切换按钮
+                        const switchModeContainer = document.createElement('div');
+                        switchModeContainer.style.cssText = `
+                            display: flex;
+                            margin-bottom: 20px;
+                            border-bottom: 1px solid #444;
                         `;
+                        
+                        const loginTabBtn = document.createElement('button');
+                        loginTabBtn.innerText = '登录';
+                        loginTabBtn.style.cssText = `
+                            flex: 1;
+                            background: none;
+                            border: none;
+                            color: #fff;
+                            padding: 10px;
+                            font-size: 16px;
+                            cursor: pointer;
+                            border-bottom: 2px solid transparent;
+                        `;
+                        
+                        const registerTabBtn = document.createElement('button');
+                        registerTabBtn.innerText = '注册';
+                        registerTabBtn.style.cssText = `
+                            flex: 1;
+                            background: none;
+                            border: none;
+                            color: #aaa;
+                            padding: 10px;
+                            font-size: 16px;
+                            cursor: pointer;
+                            border-bottom: 2px solid transparent;
+                        `;
+                        
+                        switchModeContainer.appendChild(loginTabBtn);
+                        switchModeContainer.appendChild(registerTabBtn);
+                        
+                        // 创建用户名和密码输入区域
+                        const createInputField = (id, label, type, placeholder) => {
+                            const container = document.createElement('div');
+                            container.style.cssText = 'margin-bottom: 15px;';
+                            
+                            const labelElement = document.createElement('label');
+                            labelElement.htmlFor = id;
+                            labelElement.innerText = label;
+                            labelElement.style.cssText = 'display: block; margin-bottom: 5px; color: #ccc;';
+                            
+                            const input = document.createElement('input');
+                            input.id = id;
+                            input.type = type;
+                            input.placeholder = placeholder;
+                            input.style.cssText = 'width: 100%; padding: 8px; border-radius: 4px; background: #333; border: 1px solid #555; color: white;';
+                            
+                            container.appendChild(labelElement);
+                            container.appendChild(input);
+                            return container;
+                        };
+                        
+                        // 创建错误消息区域
+                        const errorElement = document.createElement('div');
+                        errorElement.id = 'auth-error';
+                        errorElement.style.cssText = 'color: #ff6b6b; text-align: center; display: none; margin-top: 10px;';
+                        
+                        // 创建提交按钮
+                        const submitButton = document.createElement('button');
+                        submitButton.id = 'auth-submit-btn';
+                        submitButton.style.cssText = 'padding: 10px; background: linear-gradient(90deg, #2a8cff 0%, #3a6cff 100%); border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;';
                         
                         // 添加所有元素到模态框
                         modalContent.appendChild(closeBtn);
                         modalContent.appendChild(title);
-                        modalContent.appendChild(loginFormContainer);
+                        modalContent.appendChild(switchModeContainer);
+                        modalContent.appendChild(formContainer);
                         modalContainer.appendChild(modalContent);
                         
                         // 添加模态框到body
                         document.body.appendChild(modalContainer);
                         
-                        // 为登录按钮添加事件处理
-                        const loginBtn = document.getElementById('login-btn');
-                        const usernameInput = document.getElementById('username-input');
-                        const passwordInput = document.getElementById('password-input');
-                        const errorElement = document.getElementById('login-error');
+                        // 初始化为登录模式
+                        let isLoginMode = true;
                         
-                        loginBtn.onclick = async () => {
+                        // 切换登录/注册模式的函数
+                        function switchToMode(loginMode) {
+                            isLoginMode = loginMode;
+                            formContainer.innerHTML = '';
+                            
+                            // 更新标题和按钮状态
+                            title.innerText = isLoginMode ? '✨ 用户登录' : '✨ 用户注册';
+                            
+                            // 更新标签页样式
+                            loginTabBtn.style.color = isLoginMode ? '#fff' : '#aaa';
+                            loginTabBtn.style.borderBottom = isLoginMode ? '2px solid #2a8cff' : '2px solid transparent';
+                            
+                            registerTabBtn.style.color = isLoginMode ? '#aaa' : '#fff';
+                            registerTabBtn.style.borderBottom = isLoginMode ? '2px solid transparent' : '2px solid #2a8cff';
+                            
+                            // 创建表单字段
+                            const usernameField = createInputField('username-input', '用户名', 'text', '请输入用户名');
+                            const passwordField = createInputField('password-input', '密码', 'password', '请输入密码');
+                            
+                            // 添加确认密码字段（仅注册模式）
+                            let confirmPasswordField = null;
+                            if (!isLoginMode) {
+                                confirmPasswordField = createInputField('confirm-password-input', '确认密码', 'password', '请再次输入密码');
+                            }
+                            
+                            // 设置提交按钮文本
+                            submitButton.innerText = isLoginMode ? '登录' : '注册';
+                            
+                            // 组装表单
+                            formContainer.appendChild(usernameField);
+                            formContainer.appendChild(passwordField);
+                            if (confirmPasswordField) {
+                                formContainer.appendChild(confirmPasswordField);
+                            }
+                            formContainer.appendChild(submitButton);
+                            formContainer.appendChild(errorElement);
+                            
+                            // 添加说明文本
+                            const infoText = document.createElement('div');
+                            infoText.style.cssText = 'margin-top: 15px; text-align: center; font-size: 0.9em; color: #aaa;';
+                            infoText.innerText = isLoginMode 
+                                ? '* 如果您还没有账号，请点击上方的"注册"按钮' 
+                                : '* 注册成功后将自动登录系统';
+                            formContainer.appendChild(infoText);
+                        }
+                        
+                        // 显示错误信息的函数
+                        function showError(message) {
+                            errorElement.innerText = message;
+                            errorElement.style.display = 'block';
+                        }
+                        
+                        // 初始化表单为登录模式
+                        switchToMode(true);
+                        
+                        // 添加切换按钮事件
+                        loginTabBtn.onclick = () => switchToMode(true);
+                        registerTabBtn.onclick = () => switchToMode(false);
+                        
+                        // 处理表单提交
+                        submitButton.onclick = async () => {
                             try {
-                                const username = usernameInput.value.trim();
-                                const password = passwordInput.value.trim();
+                                // 获取表单数据
+                                const username = document.getElementById('username-input').value.trim();
+                                const password = document.getElementById('password-input').value.trim();
                                 
+                                // 基本验证
                                 if (!username) {
-                                    showLoginError('请输入用户名');
-                                    return;
+                                    return showError('请输入用户名');
                                 }
                                 
                                 if (!password) {
-                                    showLoginError('请输入密码');
-                                    return;
+                                    return showError('请输入密码');
+                                }
+                                
+                                // 注册模式下的额外验证
+                                if (!isLoginMode) {
+                                    const confirmPassword = document.getElementById('confirm-password-input').value.trim();
+                                    if (password !== confirmPassword) {
+                                        return showError('两次输入的密码不一致');
+                                    }
+                                    
+                                    // 密码强度验证
+                                    if (password.length < 6) {
+                                        return showError('密码长度至少为6个字符');
+                                    }
                                 }
                                 
                                 // 显示加载状态
-                                loginBtn.textContent = '登录中...';
-                                loginBtn.disabled = true;
+                                submitButton.innerText = isLoginMode ? '登录中...' : '注册中...';
+                                submitButton.disabled = true;
+                                errorElement.style.display = 'none';
                                 
-                                // 调用后端API进行登录验证
-                                const response = await fetch('/workflow_manager/auth/login', {
+                                // 根据模式选择API端点
+                                const endpoint = isLoginMode ? '/workflow_manager/auth/login' : '/workflow_manager/auth/register';
+                                
+                                // 发送请求
+                                const response = await fetch(endpoint, {
                                     method: 'POST',
                                     headers: {
                                         'Content-Type': 'application/json'
@@ -596,9 +686,10 @@ app.registerExtension({
                                     })
                                 });
                                 
+                                // 处理响应
                                 if (!response.ok) {
                                     const errorData = await response.json();
-                                    throw new Error(errorData.message || '登录失败，请检查用户名和密码');
+                                    throw new Error(errorData.message || (isLoginMode ? '登录失败，请检查用户名和密码' : '注册失败，请稍后重试'));
                                 }
                                 
                                 const user = await response.json();
@@ -613,25 +704,14 @@ app.registerExtension({
                                 // 关闭模态框
                                 document.body.removeChild(modalContainer);
                                 
-                                // 重新加载会员工作流（如果在会员标签页）
-                                if (memberTabBtn && memberTabBtn.classList.contains('active')) {
-                                    loadMemberWorkflows(memberContent);
-                                }
-                                
-                                console.log('[工作流管理器] 登录成功:', user);
+                                console.log('[工作流管理器] 操作成功:', user);
                             } catch (error) {
-                                console.error('[工作流管理器] 登录失败:', error);
-                                showLoginError('登录失败: ' + (error.message || '未知错误'));
-                                loginBtn.textContent = '登录';
-                                loginBtn.disabled = false;
+                                console.error('[工作流管理器] 操作失败:', error);
+                                showError(error.message || '操作失败，请稍后重试');
+                                submitButton.innerText = isLoginMode ? '登录' : '注册';
+                                submitButton.disabled = false;
                             }
                         };
-                        
-                        // 显示登录错误信息
-                        function showLoginError(message) {
-                            errorElement.textContent = message;
-                            errorElement.style.display = 'block';
-                        }
                     } catch (error) {
                         console.error("[工作流管理器] 创建登录界面失败:", error);
                         alert("创建登录界面失败，请稍后重试");
@@ -647,89 +727,12 @@ app.registerExtension({
                     // 恢复为登录按钮
                     showLoginButton();
                     
-                    // 如果当前在会员工作流页面，自动切换回本地工作流
-                    if (memberTabBtn.classList.contains('active')) {
+                    // 如果当前在云端工作流页面，自动切换回本地工作流
+                    if (cloudTabBtn.classList.contains('active')) {
                         localTabBtn.click();
                     }
                     
                     console.log("[工作流管理器] 已退出登录");
-                }
-                
-                // 加载会员专属工作流
-                async function loadMemberWorkflows(container) {
-                    let contentListDiv = container.querySelector('.workflow-content-list');
-                    if (!contentListDiv) {
-                        contentListDiv = document.createElement("div");
-                        contentListDiv.className = "workflow-content-list";
-                        container.appendChild(contentListDiv);
-                    }
-                    contentListDiv.innerHTML = ''; // 清空内容
-                    
-                    try {
-                        const token = localStorage.getItem('userToken');
-                        if (!token) {
-                            throw new Error("未登录");
-                        }
-                        
-                        const response = await fetch("/workflow_manager/user/workflows", {
-                            method: "GET",
-                            headers: {
-                                "Authorization": `Bearer ${token}`,
-                                "Content-Type": "application/json"
-                            }
-                        });
-                        
-                        if (!response.ok) {
-                            if (response.status === 404) {
-                                const messageDiv = document.createElement("div");
-                                messageDiv.style = "color: orange;";
-                                messageDiv.innerText = "会员工作流功能正在开发中或接口未找到。";
-                                contentListDiv.appendChild(messageDiv);
-                                return;
-                            }
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        
-                        const data = await response.json();
-                        renderFolders(data, contentListDiv, loadMemberWorkflow);
-                    } catch (error) {
-                        console.error("[工作流管理器] 获取会员工作流列表失败:", error);
-                        const errorDiv = document.createElement("div");
-                        errorDiv.style = "color: red;";
-                        errorDiv.innerText = "获取会员工作流列表失败: " + error.message;
-                        contentListDiv.appendChild(errorDiv);
-                    }
-                }
-                
-                // 加载会员工作流
-                async function loadMemberWorkflow(relPath) {
-                    console.log("[工作流管理器] 开始加载会员工作流:", relPath);
-                    try {
-                        const token = localStorage.getItem('userToken');
-                        if (!token) {
-                            throw new Error("未登录");
-                        }
-                        
-                        const response = await fetch(`/workflow_manager/user/workflows/${relPath}`, {
-                            method: "GET",
-                            headers: {
-                                "Authorization": `Bearer ${token}`,
-                                "Content-Type": "application/json"
-                            }
-                        });
-                        
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        
-                        const json = await response.json();
-                        console.log("[工作流管理器] 会员工作流加载成功:", json);
-                        app.loadGraphData(json);
-                        alert("已加载会员工作流：" + relPath);
-                    } catch (error) {
-                        console.error("[工作流管理器] 加载会员工作流失败:", error);
-                        alert("加载会员工作流失败：" + error.message);
-                    }
                 }
                 
                 // 检查并初始化用户登录状态

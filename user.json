@@ -14,13 +14,13 @@
     "registerSource": [
         "basic:username-password"
     ],
-    "photo": "https://files.authing.co/authing-console/default-user-avatar.png",
+    "photo": "https://files.authing.co/user-contents/photos/f6d64e26-2050-4af8-9d9d-c23c3c94bb40.jpg",
     "password": "cb73f5a7b558c29891d80ac9256bf061",
     "oauth": null,
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1cGRhdGVkX2F0IjoiMjAyNS0wNS0yM1QxMjozMDowNS40MjVaIiwiYWRkcmVzcyI6eyJjb3VudHJ5IjpudWxsLCJwb3N0YWxfY29kZSI6bnVsbCwicmVnaW9uIjpudWxsLCJmb3JtYXR0ZWQiOm51bGx9LCJwaG9uZV9udW1iZXJfdmVyaWZpZWQiOmZhbHNlLCJwaG9uZV9udW1iZXIiOm51bGwsImxvY2FsZSI6bnVsbCwiem9uZWluZm8iOm51bGwsImJpcnRoZGF0ZSI6bnVsbCwiZ2VuZGVyIjoiVSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwiZW1haWwiOm51bGwsIndlYnNpdGUiOm51bGwsInBpY3R1cmUiOiJodHRwczovL2ZpbGVzLmF1dGhpbmcuY28vYXV0aGluZy1jb25zb2xlL2RlZmF1bHQtdXNlci1hdmF0YXIucG5nIiwicHJvZmlsZSI6bnVsbCwicHJlZmVycmVkX3VzZXJuYW1lIjpudWxsLCJuaWNrbmFtZSI6bnVsbCwibWlkZGxlX25hbWUiOm51bGwsImZhbWlseV9uYW1lIjpudWxsLCJnaXZlbl9uYW1lIjpudWxsLCJuYW1lIjpudWxsLCJzdWIiOiI2ODJmMjU1MWM3NGI0ZmE2ZDQzZDQ1NmEiLCJleHRlcm5hbF9pZCI6bnVsbCwidW5pb25pZCI6bnVsbCwidXNlcm5hbWUiOiJtYXgiLCJkYXRhIjp7InR5cGUiOiJ1c2VyIiwidXNlclBvb2xJZCI6IjY4MmYyMTlmYWRjNjllMDczMDFiMzQ2NCIsImFwcElkIjoiNjgyZjIxYTI4YzU4NmNmNTNiNmQ3ZGMxIiwiaWQiOiI2ODJmMjU1MWM3NGI0ZmE2ZDQzZDQ1NmEiLCJ1c2VySWQiOiI2ODJmMjU1MWM3NGI0ZmE2ZDQzZDQ1NmEiLCJfaWQiOiI2ODJmMjU1MWM3NGI0ZmE2ZDQzZDQ1NmEiLCJwaG9uZSI6bnVsbCwiZW1haWwiOm51bGwsInVzZXJuYW1lIjoibWF4IiwidW5pb25pZCI6bnVsbCwib3BlbmlkIjpudWxsLCJjbGllbnRJZCI6IjY4MmYyMTlmYWRjNjllMDczMDFiMzQ2NCJ9LCJ1c2VycG9vbF9pZCI6IjY4MmYyMTlmYWRjNjllMDczMDFiMzQ2NCIsImF1ZCI6IjY4MmYyMWEyOGM1ODZjZjUzYjZkN2RjMSIsImV4cCI6MTc0OTIxMzc2NCwiaWF0IjoxNzQ4MDA0MTY0LCJpc3MiOiJodHRwczovL3N0YXJmdXNpb24uYXV0aGluZy5jbi9vaWRjIn0.puJM6ATRFlkBrSoXpw53KYY77bdH83jIxUImPDG4I4Q",
-    "tokenExpiredAt": "2025-06-06T20:42:44+08:00",
-    "loginsCount": 18,
-    "lastLogin": "2025-05-23T20:42:44+08:00",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1cGRhdGVkX2F0IjoiMjAyNS0wNS0yNlQwODoyOTo1Ny44ODZaIiwiYWRkcmVzcyI6eyJjb3VudHJ5IjpudWxsLCJwb3N0YWxfY29kZSI6bnVsbCwicmVnaW9uIjpudWxsLCJmb3JtYXR0ZWQiOm51bGx9LCJwaG9uZV9udW1iZXJfdmVyaWZpZWQiOmZhbHNlLCJwaG9uZV9udW1iZXIiOm51bGwsImxvY2FsZSI6bnVsbCwiem9uZWluZm8iOm51bGwsImJpcnRoZGF0ZSI6bnVsbCwiZ2VuZGVyIjoiVSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwiZW1haWwiOm51bGwsIndlYnNpdGUiOm51bGwsInBpY3R1cmUiOiJodHRwczovL2ZpbGVzLmF1dGhpbmcuY28vdXNlci1jb250ZW50cy9waG90b3MvZjZkNjRlMjYtMjA1MC00YWY4LTlkOWQtYzIzYzNjOTRiYjQwLmpwZyIsInByb2ZpbGUiOiIiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOm51bGwsIm5pY2tuYW1lIjpudWxsLCJtaWRkbGVfbmFtZSI6bnVsbCwiZmFtaWx5X25hbWUiOm51bGwsImdpdmVuX25hbWUiOm51bGwsIm5hbWUiOm51bGwsInN1YiI6IjY4MmYyNTUxYzc0YjRmYTZkNDNkNDU2YSIsImV4dGVybmFsX2lkIjpudWxsLCJ1bmlvbmlkIjpudWxsLCJ1c2VybmFtZSI6Im1heCIsImRhdGEiOnsidHlwZSI6InVzZXIiLCJ1c2VyUG9vbElkIjoiNjgyZjIxOWZhZGM2OWUwNzMwMWIzNDY0IiwiYXBwSWQiOiI2ODJmMjFhMjhjNTg2Y2Y1M2I2ZDdkYzEiLCJpZCI6IjY4MmYyNTUxYzc0YjRmYTZkNDNkNDU2YSIsInVzZXJJZCI6IjY4MmYyNTUxYzc0YjRmYTZkNDNkNDU2YSIsIl9pZCI6IjY4MmYyNTUxYzc0YjRmYTZkNDNkNDU2YSIsInBob25lIjpudWxsLCJlbWFpbCI6bnVsbCwidXNlcm5hbWUiOiJtYXgiLCJ1bmlvbmlkIjpudWxsLCJvcGVuaWQiOm51bGwsImNsaWVudElkIjoiNjgyZjIxOWZhZGM2OWUwNzMwMWIzNDY0In0sInVzZXJwb29sX2lkIjoiNjgyZjIxOWZhZGM2OWUwNzMwMWIzNDY0IiwiYXVkIjoiNjgyZjIxYTI4YzU4NmNmNTNiNmQ3ZGMxIiwiZXhwIjoxNzQ5NDU3ODMxLCJpYXQiOjE3NDgyNDgyMzEsImlzcyI6Imh0dHBzOi8vc3RhcmZ1c2lvbi5hdXRoaW5nLmNuL29pZGMifQ.L_uYffk_Jt6yaLGifWpxyaIJ8nlSPdAFCMc6lmT6qoE",
+    "tokenExpiredAt": "2025-06-09T16:30:31+08:00",
+    "loginsCount": 65,
+    "lastLogin": "2025-05-26T16:30:31+08:00",
     "lastIP": "223.73.0.30",
     "signedUp": "2025-05-22T21:23:29+08:00",
     "blocked": false,
@@ -32,7 +32,7 @@
     "givenName": null,
     "familyName": null,
     "middleName": null,
-    "profile": null,
+    "profile": "",
     "preferredUsername": null,
     "website": null,
     "gender": "U",
@@ -49,6 +49,6 @@
     "province": null,
     "country": null,
     "createdAt": "2025-05-22T21:23:29+08:00",
-    "updatedAt": "2025-05-23T20:42:44+08:00",
+    "updatedAt": "2025-05-26T16:30:31+08:00",
     "externalId": null
 }

@@ -3,3 +3,7 @@ __pycache__/
 cloud_workflow_config.json
 __pycache__/github_api.cpython-312.pyc
 auth_reference/
+config/user_authing_config.json
+user.json
+user_udf.json
+user_role.json
