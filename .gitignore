@@ -9,3 +9,7 @@ user_udf.json
 user_role.json
 __pycache__/__init__.cpython-312.pyc
 __pycache__/github_api.cpython-312.pyc
+user.json
+user_authing_config.json
+test.py
+user.json

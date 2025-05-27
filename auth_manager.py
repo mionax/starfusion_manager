@@ -1,7 +1,11 @@
 import json
 import os
 import datetime
+import logging
 from typing import List, Dict, Any, Optional
+
+# 设置日志
+logger = logging.getLogger('auth_manager')
 
 class AuthManager:
     def __init__(self, user_udf_path: str = 'user_udf.json', package_config_path: str = 'config/package.json'):
@@ -28,11 +32,12 @@ class AuthManager:
             if os.path.exists(self.user_udf_path):
                 with open(self.user_udf_path, 'r', encoding='utf-8') as f:
                     self.user_data = json.load(f)
+                logger.info(f"成功加载用户数据文件: {self.user_udf_path}")
             else:
-                print(f"用户数据文件不存在: {self.user_udf_path}")
+                logger.warning(f"用户数据文件不存在: {self.user_udf_path}")
                 self.user_data = {"basic_access": {}, "packages": [], "workflows": []}
         except Exception as e:
-            print(f"加载用户数据出错: {e}")
+            logger.error(f"加载用户数据出错: {e}")
             self.user_data = {"basic_access": {}, "packages": [], "workflows": []}
     
     def _load_package_config(self) -> None:
@@ -41,11 +46,12 @@ class AuthManager:
             if os.path.exists(self.package_config_path):
                 with open(self.package_config_path, 'r', encoding='utf-8') as f:
                     self.package_config = json.load(f)
+                logger.info(f"成功加载包配置文件: {self.package_config_path}")
             else:
-                print(f"包配置文件不存在: {self.package_config_path}")
+                logger.warning(f"包配置文件不存在: {self.package_config_path}")
                 self.package_config = {}
         except Exception as e:
-            print(f"加载包配置出错: {e}")
+            logger.error(f"加载包配置出错: {e}")
             self.package_config = {}
     
     def _is_authorization_valid(self, auth_type: str, expired_at: Optional[str]) -> bool:
@@ -71,7 +77,7 @@ class AuthManager:
                 # 检查是否已过期
                 return datetime.datetime.now(datetime.timezone.utc) < expiry_date
             except Exception as e:
-                print(f"解析过期时间出错: {e}")
+                logger.error(f"解析过期时间出错: {e}")
                 return False
         
         return False
@@ -98,6 +104,7 @@ class AuthManager:
             Dict[str, Any]: 工作流ID到授权信息的映射
         """
         if not self.user_data:
+            logger.warning("无用户数据，无法获取授权工作流")
             return {}
         
         # 检查基本访问权限
@@ -108,7 +115,7 @@ class AuthManager:
         )
         
         if not basic_access_valid:
-            print("基本访问权限已过期或无效")
+            logger.warning("基本访问权限已过期或无效")
             return {}
         
         # 收集授权工作流
@@ -122,6 +129,7 @@ class AuthManager:
                 
             # 检查包授权是否有效
             if not self._is_authorization_valid(package.get("type", ""), package.get("expired_at")):
+                logger.info(f"包授权已过期: {package_id}")
                 continue
                 
             # 获取包中的工作流
@@ -133,6 +141,8 @@ class AuthManager:
                     "type": package.get("type"),
                     "expired_at": package.get("expired_at")
                 }
+            
+            logger.info(f"通过包 '{package_id}' 授权的工作流: {len(workflows)}个")
         
         # 添加直接授权的工作流
         for workflow in self.user_data.get("workflows", []):
@@ -142,6 +152,7 @@ class AuthManager:
                 
             # 检查工作流授权是否有效
             if not self._is_authorization_valid(workflow.get("type", ""), workflow.get("expired_at")):
+                logger.info(f"工作流授权已过期: {workflow_id}")
                 continue
                 
             # 如果工作流已通过包授权，则使用更优的授权类型
@@ -159,7 +170,10 @@ class AuthManager:
                     "type": workflow.get("type"),
                     "expired_at": workflow.get("expired_at")
                 }
+            
+            logger.info(f"直接授权的工作流: {workflow_id}")
         
+        logger.info(f"用户总授权工作流数: {len(authorized_workflows)}")
         return authorized_workflows
     
     def get_workflow_list(self) -> List[str]:
@@ -199,9 +213,72 @@ class AuthManager:
                 return None
             return workflows[workflow_id].get("expired_at")
         return None
+    
+    def load_user_udf_data(self, udf_data: Dict[str, Any]) -> None:
+        """
+        直接加载用户UDF数据（从Authing API获取）
+        
+        Args:
+            udf_data: 用户自定义字段数据
+        """
+        try:
+            if 'user_authing_info' in udf_data:
+                # 将内部的JSON字符串解析为Python对象
+                user_data = json.loads(udf_data['user_authing_info'])
+                
+                # 创建新的格式化数据结构
+                self.user_data = {
+                    'basic_access': user_data.get('basic_access', {}),
+                    'packages': user_data.get('packages', []),
+                    'workflows': user_data.get('workflows', [])
+                }
+                logger.info("成功从UDF数据加载用户授权信息")
+            else:
+                logger.warning("UDF数据中未找到user_authing_info字段")
+        except Exception as e:
+            logger.error(f"解析UDF数据出错: {e}")
+    
+    def save_user_udf_data(self, target_path: str = None) -> None:
+        """
+        保存用户UDF数据到文件
+        
+        Args:
+            target_path: 目标文件路径，如果为None则使用默认路径
+        """
+        if not self.user_data:
+            logger.warning("没有用户数据可保存")
+            return
+            
+        save_path = target_path or self.user_udf_path
+        
+        try:
+            with open(save_path, 'w', encoding='utf-8') as f:
+                json.dump(self.user_data, f, ensure_ascii=False, indent=4)
+            logger.info(f"用户授权数据保存成功: {save_path}")
+        except Exception as e:
+            logger.error(f"保存用户授权数据出错: {e}")
+            
+    @staticmethod
+    def from_authing_udf(udf_data: Dict[str, Any], package_config_path: str = 'config/package.json') -> 'AuthManager':
+        """
+        从Authing用户UDF数据创建AuthManager实例
+        
+        Args:
+            udf_data: Authing UDF数据
+            package_config_path: 包配置文件路径
+            
+        Returns:
+            AuthManager实例
+        """
+        auth_manager = AuthManager(package_config_path=package_config_path)
+        auth_manager.load_user_udf_data(udf_data)
+        return auth_manager
 
 # 使用示例
 if __name__ == "__main__":
+    # 设置日志级别
+    logging.basicConfig(level=logging.INFO)
+    
     auth_manager = AuthManager()
     
     # 获取所有授权的工作流

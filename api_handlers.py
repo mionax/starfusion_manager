@@ -1,8 +1,9 @@
 import json
 import logging
 from aiohttp import web
-from .auth_service import validate_token, login_user, register_user
+from .auth_service import validate_token, login_user, register_user, get_user_custom_data
 from .utils import WorkflowCache
+from .auth_manager import AuthManager
 
 # 设置日志
 logger = logging.getLogger('api_handlers')
@@ -213,12 +214,14 @@ async def handle_get_user_workflows(request):
         if error_response:
             return error_response
         
-        # 获取用户ID
+        # 获取用户ID和token
         user_id = user_info.get('id')
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
         
         # 获取用户工作流列表
         from .workflow_manager import get_user_workflows
-        user_workflows = get_user_workflows(user_id)
+        user_workflows = get_user_workflows(user_id, token)
         
         logger.info(f"用户工作流列表: {json.dumps(user_workflows, ensure_ascii=False)}")
         return web.json_response(user_workflows)
@@ -361,4 +364,98 @@ async def handle_auth_register(request):
         return web.json_response({
             "error": "Internal server error",
             "message": "服务器内部错误，请稍后重试"
-        }, status=500) 
+        }, status=500)
+
+# 授权管理相关处理函数
+async def handle_get_authorized_workflows(request):
+    """获取用户授权的工作流列表"""
+    try:
+        logger.info("收到获取用户授权工作流列表请求")
+        
+        # 验证用户Token
+        user_info, error_response = await get_and_validate_token(request)
+        if error_response:
+            return error_response
+            
+        # 获取token
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+        
+        # 获取用户自定义数据（包含授权信息）
+        udf_data = get_user_custom_data(token)
+        if not udf_data:
+            logger.warning("获取用户授权数据失败")
+            return web.json_response({
+                "error": "Failed to get authorization data",
+                "message": "获取授权数据失败"
+            }, status=500)
+            
+        # 创建授权管理器
+        auth_manager = AuthManager.from_authing_udf(udf_data)
+        
+        # 获取授权工作流
+        authorized_workflows = auth_manager.get_authorized_workflows()
+        
+        # 获取工作流ID列表
+        workflow_list = list(authorized_workflows.keys())
+        
+        # 添加详细授权信息
+        result = {
+            "workflow_list": workflow_list,
+            "workflow_details": authorized_workflows
+        }
+        
+        logger.info(f"获取到用户授权工作流: {len(workflow_list)}个")
+        return web.json_response(result)
+    except Exception as e:
+        logger.error(f"获取授权工作流列表时出错: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+        
+async def handle_check_workflow_auth(request):
+    """检查特定工作流的授权状态"""
+    try:
+        logger.info("收到检查工作流授权状态请求")
+        
+        # 验证用户Token
+        user_info, error_response = await get_and_validate_token(request)
+        if error_response:
+            return error_response
+            
+        # 获取请求参数
+        data = await request.json()
+        workflow_id = data.get('workflow_id')
+        
+        if not workflow_id:
+            return web.json_response({
+                "error": "Missing workflow_id",
+                "message": "请提供工作流ID"
+            }, status=400)
+            
+        # 获取token
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+        
+        # 获取用户自定义数据
+        udf_data = get_user_custom_data(token)
+        
+        # 创建授权管理器
+        auth_manager = AuthManager.from_authing_udf(udf_data)
+        
+        # 检查授权状态
+        is_authorized = auth_manager.is_workflow_authorized(workflow_id)
+        
+        # 获取过期时间
+        expiry = auth_manager.get_workflow_expiry(workflow_id)
+        
+        result = {
+            "workflow_id": workflow_id,
+            "authorized": is_authorized,
+            "expires_at": expiry,
+            "permanent": is_authorized and expiry is None
+        }
+        
+        logger.info(f"工作流 {workflow_id} 授权状态: {is_authorized}")
+        return web.json_response(result)
+    except Exception as e:
+        logger.error(f"检查工作流授权状态时出错: {e}")
+        return web.json_response({"error": str(e)}, status=500) 

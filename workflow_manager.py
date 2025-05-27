@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from .github_api import GitHubAPI
 from .utils import load_config, ensure_dir_exists, WorkflowCache
 from .data_sources import LocalWorkflowSource, GitHubWorkflowSource
+from .auth_service import get_user_custom_data
+from .auth_manager import AuthManager
 from .api_handlers import (
     handle_get_workflows, 
     handle_get_workflow,
@@ -17,6 +19,8 @@ from .api_handlers import (
     handle_get_user_workflow,
     handle_auth_login,
     handle_auth_register,
+    handle_get_authorized_workflows,
+    handle_check_workflow_auth,
     workflow_cache
 )
 
@@ -71,8 +75,34 @@ setattr(module, 'workflow_cache', global_workflow_cache)
 local_source = LocalWorkflowSource(WORKFLOW_DIR)
 github_source = GitHubWorkflowSource(github_api, REMOTE_WORKFLOW_BASE_PATH, global_workflow_cache)
 
-def get_user_workflows(user_id):
-    """获取用户可访问的工作流列表"""
+def get_auth_manager_for_user(user_id, token=None):
+    """为指定用户创建授权管理器
+    
+    Args:
+        user_id: 用户ID
+        token: 用户Token
+    
+    Returns:
+        AuthManager实例
+    """
+    # 获取用户自定义数据
+    udf_data = get_user_custom_data(token)
+    
+    # 创建并返回授权管理器
+    auth_manager = AuthManager.from_authing_udf(udf_data)
+    logger.info(f"为用户 {user_id} 创建授权管理器")
+    return auth_manager
+
+def get_user_workflows(user_id, token=None):
+    """获取用户可访问的工作流列表，结合授权信息
+    
+    Args:
+        user_id: 用户ID
+        token: 用户Token
+        
+    Returns:
+        用户可访问的工作流列表
+    """
     logger.info(f"获取用户 {user_id} 的专属工作流")
     
     # 如果GitHub Token未配置，返回空列表
@@ -81,43 +111,72 @@ def get_user_workflows(user_id):
         return []
     
     try:
-        # 定义用户工作流在GitHub仓库中的路径
-        user_workflow_base_path = f"{REMOTE_WORKFLOW_BASE_PATH}/user_workflows"
-        
-        # 从缓存中获取或从GitHub读取用户工作流目录内容
+        # 从缓存获取用户工作流
         cache_key = f"user_workflows:{user_id}"
         cached_workflows = global_workflow_cache.get(cache_key)
-        
         if cached_workflows is not None:
             return cached_workflows
+        
+        # 获取用户授权管理器
+        auth_manager = get_auth_manager_for_user(user_id, token)
+        
+        # 获取授权工作流ID列表
+        authorized_workflow_ids = auth_manager.get_workflow_list()
+        if not authorized_workflow_ids:
+            logger.warning(f"用户 {user_id} 没有授权的工作流")
+            return []
+            
+        logger.info(f"用户 {user_id} 有 {len(authorized_workflow_ids)} 个授权工作流")
+            
+        # 定义用户工作流在GitHub仓库中的路径
+        user_workflow_base_path = f"{REMOTE_WORKFLOW_BASE_PATH}/user_workflows"
         
         # 创建用户专用的GitHubWorkflowSource
         user_source = GitHubWorkflowSource(github_api, user_workflow_base_path, global_workflow_cache)
         
-        # 使用GitHub API获取用户工作流目录结构
-        user_workflows = user_source.scan_directory()
+        # 获取全部可用工作流
+        all_workflows = []
         
-        # 如果找不到用户工作流目录，尝试读取公共工作流
-        if not user_workflows:
-            logger.info(f"未找到用户工作流目录，尝试使用公共工作流: {user_workflow_base_path}")
-            # 使用公共目录数据源
-            public_source = GitHubWorkflowSource(github_api, REMOTE_WORKFLOW_BASE_PATH, global_workflow_cache)
-            public_workflows = public_source.scan_directory()
+        # 扫描用户专属目录
+        user_workflows = user_source.scan_directory()
+        if user_workflows:
+            all_workflows.extend(user_workflows)
             
-            # 如果有工作流数据，添加一个说明标签并简化
-            if public_workflows:
-                # 简化目录结构
-                user_workflows = [
-                    {
-                        "name": "推荐工作流",
-                        "files": folder.get("files", [])
-                    } for folder in public_workflows if folder.get("files")
-                ][:3]  # 只取前3个工作流文件夹作为示例
+        # 扫描公共目录
+        public_source = GitHubWorkflowSource(github_api, REMOTE_WORKFLOW_BASE_PATH, global_workflow_cache)
+        public_workflows = public_source.scan_directory()
+        if public_workflows:
+            all_workflows.extend(public_workflows)
+            
+        # 过滤工作流，只保留授权的工作流
+        filtered_workflows = []
+        
+        for folder in all_workflows:
+            folder_name = folder.get("name", "")
+            files = folder.get("files", [])
+            
+            # 过滤文件列表，只保留授权的工作流
+            authorized_files = []
+            for file_name in files:
+                # 提取工作流ID（去掉.json后缀）
+                workflow_id = os.path.splitext(file_name)[0]
+                
+                # 检查是否有权限
+                if workflow_id in authorized_workflow_ids:
+                    authorized_files.append(file_name)
+            
+            # 如果有授权的文件，添加到结果中
+            if authorized_files:
+                filtered_workflows.append({
+                    "name": folder_name,
+                    "files": authorized_files
+                })
         
         # 缓存结果
-        global_workflow_cache.set(cache_key, user_workflows)
+        global_workflow_cache.set(cache_key, filtered_workflows)
         
-        return user_workflows
+        logger.info(f"用户 {user_id} 授权工作流列表: {len(filtered_workflows)} 个文件夹")
+        return filtered_workflows
     except Exception as e:
         logger.error(f"获取用户工作流失败: {e}")
         return []
@@ -150,6 +209,10 @@ def setup(app):
         # 用户工作流路由
         app.router.add_get("/workflow_manager/user/workflows", handle_get_user_workflows)
         app.router.add_get("/workflow_manager/user/workflows/{path:.*}", handle_get_user_workflow)
+        
+        # 授权工作流相关路由
+        app.router.add_get("/workflow_manager/auth/workflows", handle_get_authorized_workflows)
+        app.router.add_post("/workflow_manager/auth/check_workflow", handle_check_workflow_auth)
 
         logger.info("工作流管理器路由已注册")
         logger.info("="*50)
