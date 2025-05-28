@@ -1,5 +1,6 @@
 import os
 import json
+import ast
 import time
 import logging
 import datetime
@@ -28,7 +29,7 @@ try:
             options=AuthenticationClientOptions(
                 app_id=APP_ID,
                 app_host=APP_HOST,
-                # 注意：新版本的Authing SDK可能不需要app_secret
+                # 注意：新版本的Authing SDK不需要app_secret
             )
         )
         logger.info(f"Authing客户端初始化成功，APP_ID: {APP_ID[:8]}...")
@@ -73,42 +74,33 @@ def validate_token(token):
             logger.warning("无效Token")
             return None
             
-        # 调用Authing API验证Token
-        try:
-            # 尝试使用token解析用户信息
-            user_info = None
-            
-            try:
-                try:
-                    # 使用get_current_user方法
-                    user_info = authentication_client.get_current_user()
-                except (AttributeError, TypeError) as e:
-                    # 如果上面的方法不存在，尝试get_user_info方法
-                    logger.info(f"尝试使用get_user_info方法: {e}")
-                    user_info = authentication_client.get_user_info(token)
-                    
-                logger.info(f"Token验证API调用成功: {type(user_info)}")
-            except Exception as e:
-                logger.error(f"直接使用token获取用户信息失败: {e}")
-                user_info = None
-
-        except Exception as e:
-            logger.error(f"Token验证API调用失败: {e}")
-            return None
+        # 设置token
+        authentication_client.set_token(token)
         
-        if user_info and (isinstance(user_info, dict) and 'id' in user_info):
-            logger.info(f"Token验证成功，用户ID: {user_info.get('id')}")
-            # 确保返回格式一致的用户信息
-            return {
-                "id": user_info.get('id', 'unknown'),
-                "username": user_info.get('username', user_info.get('name', 'user')),
-                "nickname": user_info.get('nickname', user_info.get('name', user_info.get('username', 'User'))),
-                "avatar": user_info.get('photo', user_info.get('picture', '')),
-                "email": user_info.get('email', ''),
-                "phone": user_info.get('phone', '')
-            }
+        # 使用checkLoginStatus方法检查token状态
+        status = authentication_client.check_login_status(token)
+        
+        if status and status.get('status') and status.get('code') == 200:
+            # token有效，获取用户信息
+            user_info = authentication_client.get_current_user()
+            logger.info(f"Token验证API调用成功: {type(user_info)}")
+            
+            if user_info and (isinstance(user_info, dict) and 'id' in user_info):
+                logger.info(f"Token验证成功，用户ID: {user_info.get('id')}")
+                # 确保返回格式一致的用户信息
+                return {
+                    "id": user_info.get('id', 'unknown'),
+                    "username": user_info.get('username', user_info.get('name', 'user')),
+                    "nickname": user_info.get('nickname', user_info.get('name', user_info.get('username', 'User'))),
+                    "avatar": user_info.get('photo', user_info.get('picture', '')),
+                    "email": user_info.get('email', ''),
+                    "phone": user_info.get('phone', '')
+                }
+            else:
+                logger.warning(f"Token验证失败，无法解析用户信息: {user_info}")
+                return None
         else:
-            logger.warning(f"Token验证失败，无法解析用户信息: {user_info}")
+            # token无效
             return None
     except Exception as e:
         logger.error(f"Token验证过程出错: {e}")
@@ -158,21 +150,21 @@ def login_user(username, password):
             logger.error(f"登录失败，无法获取用户信息: {user}")
             return None, "登录失败，无法获取用户信息"
             
-        # 记录token以便调试
-        if 'token' in user:
-            logger.info(f"成功获取token: {user['token'][:10]}...")
-        else:
-            logger.warning(f"用户信息中未找到token，尝试使用get_current_user获取")
-            try:
-                # 尝试使用get_current_user获取当前用户信息
-                current_user = authentication_client.get_current_user()
-                if current_user and 'token' in current_user:
-                    user['token'] = current_user['token']
-                    logger.info(f"从get_current_user获取token成功")
-                else:
-                    logger.warning("get_current_user未返回token")
-            except Exception as e:
-                logger.error(f"获取当前用户信息失败: {e}")
+        # # 记录token以便调试
+        # if 'token' in user:
+        #     logger.info(f"成功获取token: {user['token'][:10]}...")
+        # else:
+        #     logger.warning(f"用户信息中未找到token，尝试使用get_current_user获取")
+        #     try:
+        #         # 尝试使用get_current_user获取当前用户信息
+        #         current_user = authentication_client.get_current_user()
+        #         if current_user and 'token' in current_user:
+        #             user['token'] = current_user['token']
+        #             logger.info(f"从get_current_user获取token成功")
+        #         else:
+        #             logger.warning("get_current_user未返回token")
+        #     except Exception as e:
+        #         logger.error(f"获取当前用户信息失败: {e}")
         
         logger.info(f"Authing登录成功: {user.get('id')}")
         return user, None
@@ -225,22 +217,40 @@ def register_user(username, password):
         #     logger.info(f"查找用户时出错: {find_error}")
             
         #设置新注册用户默认授权7天
-        # 使用os.path.join构建跨平台路径，并尝试多种路径可能性
-        config_file_path = os.path.join(os.path.dirname(__file__), 'config', 'deafault_authing_config.json')
-        if not os.path.exists(config_file_path):
-            # 尝试相对于当前工作目录的路径
-            config_file_path = os.path.join('config', 'deafault_authing_config.json')
-            if not os.path.exists(config_file_path):
-                # 尝试向上一级查找
-                config_file_path = os.path.join('..', 'config', 'deafault_authing_config.json')
+        # 尝试多种可能的配置文件路径
+        possible_config_paths = [
+            os.path.join(os.path.dirname(__file__), 'config', 'deafault_authing_config.json'),  # 相对于当前文件
+            os.path.join(os.path.dirname(__file__), '..', 'config', 'deafault_authing_config.json'),  # 上一级目录
+            os.path.join('config', 'deafault_authing_config.json'),  # 相对于当前工作目录
+            os.path.abspath(os.path.join('custom_nodes', 'starfusion_manager', 'config', 'deafault_authing_config.json'))  # 可能的全局路径
+        ]
+        
+        config_file_path = None
+        for path in possible_config_paths:
+            if os.path.exists(path):
+                config_file_path = path
+                break
                 
         logger.info(f"尝试读取配置文件路径: {config_file_path}")
                 
         try:
-            with open(config_file_path, 'r', encoding='utf-8') as f:
-                default_user_authing_info = json.load(f)
-        except FileNotFoundError as e:
-            logger.error(f"找不到配置文件: {e}")
+            if config_file_path and os.path.exists(config_file_path):
+                with open(config_file_path, 'r', encoding='utf-8') as f:
+                    default_user_authing_info = json.load(f)
+                logger.info(f"成功加载默认配置文件: {config_file_path}")
+            else:
+                logger.warning(f"找不到配置文件，使用默认配置")
+                # 使用硬编码的默认值作为后备
+                default_user_authing_info = {
+                    "basic_access": {
+                        "type": "temp",
+                        "expired_at": None
+                    },
+                    "packages": [],
+                    "workflows": []
+                }
+        except Exception as e:
+            logger.error(f"读取配置文件出错: {e}")
             # 使用硬编码的默认值作为后备
             default_user_authing_info = {
                 "basic_access": {
@@ -252,18 +262,30 @@ def register_user(username, password):
             }
             
         # 计算7天后的日期时间
-        future_date = datetime.datetime.now() + datetime.timedelta(days=7)
+        future_date = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
         # 更新expired_at值为7天后的日期时间，格式为ISO8601
-        default_user_authing_info['basic_access']['expired_at'] = future_date.isoformat(timespec='milliseconds').replace('+00:00', '') + 'Z'
+        # 生成带时区的ISO8601格式，然后转换为标准的Z结尾格式
+        expiry_time = future_date.isoformat().replace('+00:00', 'Z')
+        
+        # 确保为新用户授予基础工具类包的权限
+        default_user_authing_info['basic_access']['expired_at'] = expiry_time
+        
+        # 添加基础工具类包的授权
+        default_user_authing_info['packages'].append({
+            "id": "基础工具类",
+            "type": "temp",
+            "expired_at": expiry_time
+        })
         
         logger.info(f"设置用户授权过期时间为: {default_user_authing_info['basic_access']['expired_at']}")
+        logger.info(f"授予用户基础工具类包权限，过期时间: {expiry_time}")
         
         # 注册用户
         new_user = authentication_client.register_by_username(
             username=username,
             password=password,
             custom_data={
-                "user_authing_info": f'{default_user_authing_info}'}
+                "user_authing_info": json.dumps(default_user_authing_info)}
         )
         
         if not new_user or not new_user.get('id'):
@@ -341,17 +363,50 @@ def get_user_custom_data(token=None):
             # 使用设置的token获取用户自定义数据
             try:
                 # 尝试使用token作为context获取用户UDF数据
-                authentication_client.setToken(token)
+                authentication_client.set_token(token)
                 udf_data = authentication_client.get_udf_value()
                 logger.info(f"使用token获取UDF数据成功")
-                return udf_data
             except Exception as e:
                 logger.error(f"使用token获取UDF数据失败: {e}")
                 # 如果失败，继续尝试默认方式
+                udf_data = None
+        else:
+            # 获取用户自定义数据
+            udf_data = authentication_client.get_udf_value()
+            logger.info(f"获取UDF数据成功")
+        
+        # 检查并格式化UDF数据
+        if udf_data and isinstance(udf_data, dict) and 'user_authing_info' in udf_data:
+            raw_info = udf_data['user_authing_info']
+            logger.debug(f"原始UDF数据类型: {type(raw_info)}, 内容预览: {str(raw_info)[:100]}")
             
-        # 获取用户自定义数据
-        udf_data = authentication_client.get_udf_value()
-        logger.info(f"获取UDF数据成功")
+            # 如果是字符串但不是标准JSON格式（例如Python字典格式），尝试转换
+            if isinstance(raw_info, str) and (raw_info.startswith("'") or raw_info.startswith("{")):
+                try:
+                    # 首先尝试JSON解析
+                    try:
+                        parsed_info = json.loads(raw_info)
+                    except json.JSONDecodeError:
+                        # 如果失败，尝试使用ast处理Python字典字符串
+                        parsed_info = ast.literal_eval(raw_info)
+                    
+                    # 将解析后的数据重新保存为标准JSON格式
+                    udf_data['user_authing_info'] = json.dumps(parsed_info)
+                    logger.info("UDF数据已成功重新格式化为标准JSON")
+                    
+                    # 尝试更新用户的UDF数据以修复格式问题
+                    try:
+                        if token:
+                            authentication_client.set_token(token)
+                            authentication_client.set_udfs({
+                                'user_authing_info': json.dumps(parsed_info)
+                            })
+                            logger.info("已更新用户UDF数据为标准JSON格式")
+                    except Exception as update_err:
+                        logger.warning(f"更新用户UDF数据失败: {update_err}")
+                except Exception as parse_err:
+                    logger.error(f"重新格式化UDF数据失败: {parse_err}")
+        
         return udf_data
     except Exception as e:
         logger.error(f"获取用户自定义数据失败: {e}")

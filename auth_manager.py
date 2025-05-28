@@ -3,50 +3,130 @@ import os
 import datetime
 import logging
 from typing import List, Dict, Any, Optional
+try:
+    import dateutil.parser
+except ImportError:
+    logger = logging.getLogger('auth_manager')
+    logger.warning("未找到dateutil库，将无法解析复杂日期格式。请安装: pip install python-dateutil")
+
+# 尝试使用相对导入（当作为包导入时）
+try:
+    from auth_service import get_user_custom_data
+except ImportError:
+    # 如果作为独立脚本运行，则使用绝对导入
+    try:
+        from .auth_service import get_user_custom_data
+    except ImportError:
+        # 如果两种方式都不行，提供一个模拟函数
+        def get_user_custom_data(token=None):
+            logging.warning("使用模拟的get_user_custom_data函数")
+            return {
+                "user_authing_info": json.dumps({
+                    "basic_access": {"type": "temp", "expired_at": "2025-06-02T08:00:00.000Z"},
+                    "packages": [{"id": "基础工具类", "type": "lifetime", "expired_at": None}],
+                    "workflows": []
+                })
+            }
 
 # 设置日志
 logger = logging.getLogger('auth_manager')
 
 class AuthManager:
-    def __init__(self, user_udf_path: str = 'user_udf.json', package_config_path: str = 'config/package.json'):
+    def __init__(self, package_config_path: str = 'config/package.json'):
         """
         初始化认证管理器
         
         Args:
-            user_udf_path: 用户UDF数据文件路径
             package_config_path: 包配置文件路径
         """
-        self.user_udf_path = user_udf_path
+        # 尝试多个可能的包配置路径
         self.package_config_path = package_config_path
-        self.user_data = None
         self.package_config = None
         
-        # 加载用户数据
-        self._load_user_data()
+        # 从auth_service获取用户数据并解析
+        udf_data = get_user_custom_data()
+        self.user_data = self._parse_user_data(udf_data)
+        
         # 加载包配置
         self._load_package_config()
     
-    def _load_user_data(self) -> None:
-        """加载用户UDF数据"""
+    def _parse_user_data(self, udf_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        解析从get_user_custom_data获取的用户数据
+        
+        Args:
+            udf_data: 用户自定义字段数据
+            
+        Returns:
+            Dict[str, Any]: 解析后的用户数据
+        """
         try:
-            if os.path.exists(self.user_udf_path):
-                with open(self.user_udf_path, 'r', encoding='utf-8') as f:
-                    self.user_data = json.load(f)
-                logger.info(f"成功加载用户数据文件: {self.user_udf_path}")
+            if not udf_data or 'user_authing_info' not in udf_data:
+                logger.warning("UDF数据为空或未找到user_authing_info字段")
+                return {"basic_access": {}, "packages": [], "workflows": []}
+                
+            # 将JSON字符串解析为Python对象
+            user_authing_info_str = udf_data['user_authing_info']
+            logger.debug(f"原始user_authing_info: {user_authing_info_str[:100]}")
+            
+            # 检查是否是Python字典字符串格式(使用单引号)
+            if isinstance(user_authing_info_str, str) and user_authing_info_str.startswith("'"):
+                logger.info("检测到Python字典字符串格式，使用ast模块解析")
+                import ast
+                try:
+                    user_authing_info = ast.literal_eval(user_authing_info_str)
+                except (SyntaxError, ValueError) as e:
+                    logger.error(f"解析Python字典字符串失败: {e}")
+                    return {"basic_access": {}, "packages": [], "workflows": []}
             else:
-                logger.warning(f"用户数据文件不存在: {self.user_udf_path}")
-                self.user_data = {"basic_access": {}, "packages": [], "workflows": []}
+                # 尝试标准JSON解析
+                try:
+                    user_authing_info = json.loads(user_authing_info_str)
+                except json.JSONDecodeError:
+                    # 如果标准解析失败，尝试处理单引号格式（旧数据可能是Python字典字符串）
+                    logger.warning("标准JSON解析失败，尝试处理单引号格式")
+                    import ast
+                    try:
+                        # 使用ast.literal_eval安全地解析Python字面量
+                        user_authing_info = ast.literal_eval(user_authing_info_str)
+                    except (SyntaxError, ValueError) as e:
+                        logger.error(f"解析用户数据失败: {e}")
+                        return {"basic_access": {}, "packages": [], "workflows": []}
+            
+            logger.info(f"成功解析user_authing_info，包含字段: {list(user_authing_info.keys())}")
+            
+            # 创建格式化数据结构
+            return {
+                'basic_access': user_authing_info.get('basic_access', {}),
+                'packages': user_authing_info.get('packages', []),
+                'workflows': user_authing_info.get('workflows', [])
+            }
         except Exception as e:
-            logger.error(f"加载用户数据出错: {e}")
-            self.user_data = {"basic_access": {}, "packages": [], "workflows": []}
+            logger.error(f"解析用户数据出错: {e}")
+            return {"basic_access": {}, "packages": [], "workflows": []}
     
     def _load_package_config(self) -> None:
         """加载包配置数据"""
         try:
-            if os.path.exists(self.package_config_path):
-                with open(self.package_config_path, 'r', encoding='utf-8') as f:
+            # 尝试多种可能的配置文件路径
+            possible_config_paths = [
+                self.package_config_path,  # 使用传入的路径
+                os.path.join(os.path.dirname(__file__), self.package_config_path),  # 相对于当前文件
+                os.path.join(os.path.dirname(__file__), '..', 'config', 'package.json'),  # 上一级目录
+                os.path.abspath(os.path.join('custom_nodes', 'starfusion_manager', 'config', 'package.json'))  # 可能的全局路径
+            ]
+            
+            config_file_path = None
+            for path in possible_config_paths:
+                logger.debug(f"尝试查找包配置文件: {path}")
+                if os.path.exists(path):
+                    config_file_path = path
+                    break
+            
+            if config_file_path:
+                with open(config_file_path, 'r', encoding='utf-8') as f:
                     self.package_config = json.load(f)
-                logger.info(f"成功加载包配置文件: {self.package_config_path}")
+                logger.info(f"成功加载包配置文件: {config_file_path}")
             else:
                 logger.warning(f"包配置文件不存在: {self.package_config_path}")
                 self.package_config = {}
@@ -67,19 +147,37 @@ class AuthManager:
         """
         # 永久授权
         if auth_type == "lifetime":
+            logger.debug(f"授权类型为永久(lifetime)，有效")
             return True
         
-        # 有过期时间的授权
-        if expired_at:
+        # 跟踪我们正在检查什么类型的授权，便于调试
+        logger.debug(f"检查授权类型: {auth_type}, 过期时间: {expired_at}")
+        
+        # 处理临时授权(temp)和其他类型的授权
+        if auth_type in ["temp", "monthly", "yearly"] and expired_at:
             try:
-                # 将字符串转换为datetime对象
-                expiry_date = datetime.datetime.fromisoformat(expired_at.replace('Z', '+00:00'))
+                # 将字符串转换为datetime对象，处理不同的时间格式
+                try:
+                    # 尝试ISO格式解析
+                    expiry_date = datetime.datetime.fromisoformat(expired_at.replace('Z', '+00:00'))
+                except ValueError:
+                    # 尝试其他常见格式
+                    import dateutil.parser
+                    expiry_date = dateutil.parser.parse(expired_at)
+                
+                # 获取当前UTC时间进行比较
+                now = datetime.datetime.now(datetime.timezone.utc)
+                
                 # 检查是否已过期
-                return datetime.datetime.now(datetime.timezone.utc) < expiry_date
+                is_valid = now < expiry_date
+                
+                logger.info(f"授权类型: {auth_type}, 过期时间: {expired_at}, 当前时间: {now.isoformat()}, 是否有效: {is_valid}")
+                return is_valid
             except Exception as e:
-                logger.error(f"解析过期时间出错: {e}")
+                logger.error(f"解析过期时间出错: {e}, 原始值: {expired_at}")
                 return False
         
+        logger.warning(f"授权无效: 类型={auth_type}, 过期时间={expired_at}")
         return False
     
     def _get_package_workflows(self, package_id: str) -> List[str]:
@@ -103,9 +201,17 @@ class AuthManager:
         Returns:
             Dict[str, Any]: 工作流ID到授权信息的映射
         """
+        # 确保user_data不为None
         if not self.user_data:
-            logger.warning("无用户数据，无法获取授权工作流")
-            return {}
+            logger.warning("用户数据为空，尝试重新获取")
+            # 尝试重新获取用户数据
+            udf_data = get_user_custom_data()
+            self.user_data = self._parse_user_data(udf_data)
+            
+            # 如果仍然为空，则返回空字典
+            if not self.user_data:
+                logger.error("无法获取用户数据，无法计算授权工作流")
+                return {}
         
         # 检查基本访问权限
         basic_access = self.user_data.get("basic_access", {})
@@ -221,40 +327,26 @@ class AuthManager:
         Args:
             udf_data: 用户自定义字段数据
         """
-        try:
-            if 'user_authing_info' in udf_data:
-                # 将内部的JSON字符串解析为Python对象
-                user_data = json.loads(udf_data['user_authing_info'])
-                
-                # 创建新的格式化数据结构
-                self.user_data = {
-                    'basic_access': user_data.get('basic_access', {}),
-                    'packages': user_data.get('packages', []),
-                    'workflows': user_data.get('workflows', [])
-                }
-                logger.info("成功从UDF数据加载用户授权信息")
-            else:
-                logger.warning("UDF数据中未找到user_authing_info字段")
-        except Exception as e:
-            logger.error(f"解析UDF数据出错: {e}")
+        # 直接使用已实现的解析方法处理UDF数据
+        self.user_data = self._parse_user_data(udf_data)
+        if self.user_data:
+            logger.info("成功从UDF数据加载用户授权信息")
     
-    def save_user_udf_data(self, target_path: str = None) -> None:
+    def save_user_udf_data(self, target_path: str = 'user_udf.json') -> None:
         """
         保存用户UDF数据到文件
         
         Args:
-            target_path: 目标文件路径，如果为None则使用默认路径
+            target_path: 目标文件路径，默认为'user_udf.json'
         """
         if not self.user_data:
             logger.warning("没有用户数据可保存")
             return
-            
-        save_path = target_path or self.user_udf_path
         
         try:
-            with open(save_path, 'w', encoding='utf-8') as f:
+            with open(target_path, 'w', encoding='utf-8') as f:
                 json.dump(self.user_data, f, ensure_ascii=False, indent=4)
-            logger.info(f"用户授权数据保存成功: {save_path}")
+            logger.info(f"用户授权数据保存成功: {target_path}")
         except Exception as e:
             logger.error(f"保存用户授权数据出错: {e}")
             
@@ -270,8 +362,41 @@ class AuthManager:
         Returns:
             AuthManager实例
         """
+        logger.info("从UDF数据创建AuthManager实例")
+        
+        # 如果UDF数据为空，返回空的授权管理器
+        if not udf_data:
+            logger.warning("UDF数据为空，创建默认授权管理器")
+            auth_manager = AuthManager(package_config_path=package_config_path)
+            auth_manager.user_data = {"basic_access": {}, "packages": [], "workflows": []}
+            return auth_manager
+            
+        # 创建实例并解析UDF数据
         auth_manager = AuthManager(package_config_path=package_config_path)
-        auth_manager.load_user_udf_data(udf_data)
+        
+        # 如果存在user_authing_info字段，尝试检查并纠正格式
+        if 'user_authing_info' in udf_data and isinstance(udf_data['user_authing_info'], str):
+            raw_info = udf_data['user_authing_info']
+            logger.debug(f"原始user_authing_info: {raw_info[:100]}")
+            
+            # 尝试处理格式问题
+            if raw_info.startswith("'") or (raw_info.startswith("{") and not raw_info.startswith('{')):
+                try:
+                    # 如果不是有效JSON，尝试解析Python字典
+                    import ast
+                    parsed = ast.literal_eval(raw_info)
+                    # 转换为标准JSON
+                    udf_data['user_authing_info'] = json.dumps(parsed)
+                    logger.info("已将UDF数据转换为标准JSON格式")
+                except Exception as e:
+                    logger.error(f"处理UDF数据格式失败: {e}")
+        
+        # 使用修复后的数据解析
+        auth_manager.user_data = auth_manager._parse_user_data(udf_data)
+        if not auth_manager.user_data or not auth_manager.user_data.get('basic_access'):
+            logger.warning("解析UDF数据未产生有效的用户数据结构")
+        else:
+            logger.info("成功从UDF数据创建AuthManager实例")
         return auth_manager
 
 # 使用示例
@@ -279,7 +404,57 @@ if __name__ == "__main__":
     # 设置日志级别
     logging.basicConfig(level=logging.INFO)
     
-    auth_manager = AuthManager()
+    # 在直接运行该文件时，使用模拟数据
+    mock_udf_data = {
+        "user_authing_info": json.dumps({
+            "basic_access": {
+                "type": "temp",
+                "expired_at": "2025-06-02T08:00:00.000Z"
+            },
+            "packages": [
+                {
+                    "id": "基础工具类",
+                    "type": "lifetime",
+                    "expired_at": None
+                },
+                {
+                    "id": "图像生成类",
+                    "type": "monthly",
+                    "expired_at": "2025-06-30T23:59:59.000Z"
+                }
+            ],
+            "workflows": [
+                {
+                    "id": "✂️智能抠图",
+                    "type": "lifetime",
+                    "expired_at": None
+                },
+                {
+                    "id": "📷产品拍摄",
+                    "type": "monthly",
+                    "expired_at": "2025-06-30T23:59:59.000Z"
+                }
+            ]
+        })
+    }
+    
+    # 创建AuthManager实例（当直接运行时）
+    try:
+        # 尝试使用常规方式创建
+        auth_manager = AuthManager()
+    except ImportError:
+        # 如果失败，使用模拟数据
+        print("使用模拟数据创建AuthManager实例")
+        
+        # 创建一个临时类，覆盖导入问题
+        class MockAuthManager(AuthManager):
+            def __init__(self):
+                self.package_config_path = 'config/package.json'
+                self.package_config = {}
+                # 直接使用模拟数据
+                self.user_data = self._parse_user_data(mock_udf_data)
+        
+        auth_manager = MockAuthManager()
     
     # 获取所有授权的工作流
     authorized_workflows = auth_manager.get_authorized_workflows()

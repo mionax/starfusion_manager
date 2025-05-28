@@ -23,6 +23,7 @@ from .api_handlers import (
     handle_check_workflow_auth,
     workflow_cache
 )
+import json
 
 # 加载环境变量
 load_dotenv()
@@ -71,6 +72,9 @@ import sys
 module = sys.modules['.'.join(__name__.split('.')[:-1]) + '.api_handlers']
 setattr(module, 'workflow_cache', global_workflow_cache)
 
+# 导出缓存实例供其他模块使用
+__all__ = ['global_workflow_cache', 'github_api', 'REMOTE_WORKFLOW_BASE_PATH', 'GITHUB_TOKEN']
+
 # 初始化数据源
 local_source = LocalWorkflowSource(WORKFLOW_DIR)
 github_source = GitHubWorkflowSource(github_api, REMOTE_WORKFLOW_BASE_PATH, global_workflow_cache)
@@ -94,7 +98,7 @@ def get_auth_manager_for_user(user_id, token=None):
     return auth_manager
 
 def get_user_workflows(user_id, token=None):
-    """获取用户可访问的工作流列表，结合授权信息
+    """获取用户可访问的工作流列表，结合授权信息，并预加载工作流内容到缓存
     
     Args:
         user_id: 用户ID
@@ -111,10 +115,11 @@ def get_user_workflows(user_id, token=None):
         return []
     
     try:
-        # 从缓存获取用户工作流
+        # 从缓存获取用户工作流列表
         cache_key = f"user_workflows:{user_id}"
         cached_workflows = global_workflow_cache.get(cache_key)
         if cached_workflows is not None:
+            logger.info(f"从缓存获取用户工作流列表成功")
             return cached_workflows
         
         # 获取用户授权管理器
@@ -128,30 +133,21 @@ def get_user_workflows(user_id, token=None):
             
         logger.info(f"用户 {user_id} 有 {len(authorized_workflow_ids)} 个授权工作流")
             
-        # 定义用户工作流在GitHub仓库中的路径
-        user_workflow_base_path = f"{REMOTE_WORKFLOW_BASE_PATH}/user_workflows"
-        
-        # 创建用户专用的GitHubWorkflowSource
-        user_source = GitHubWorkflowSource(github_api, user_workflow_base_path, global_workflow_cache)
-        
-        # 获取全部可用工作流
-        all_workflows = []
-        
-        # 扫描用户专属目录
-        user_workflows = user_source.scan_directory()
-        if user_workflows:
-            all_workflows.extend(user_workflows)
-            
-        # 扫描公共目录
+        # 直接从公共目录获取工作流
         public_source = GitHubWorkflowSource(github_api, REMOTE_WORKFLOW_BASE_PATH, global_workflow_cache)
         public_workflows = public_source.scan_directory()
-        if public_workflows:
-            all_workflows.extend(public_workflows)
+        
+        if not public_workflows:
+            logger.warning("公共目录中未找到工作流")
+            return []
             
         # 过滤工作流，只保留授权的工作流
         filtered_workflows = []
         
-        for folder in all_workflows:
+        # 收集需要预加载的工作流路径
+        workflows_to_preload = []
+        
+        for folder in public_workflows:
             folder_name = folder.get("name", "")
             files = folder.get("files", [])
             
@@ -164,6 +160,11 @@ def get_user_workflows(user_id, token=None):
                 # 检查是否有权限
                 if workflow_id in authorized_workflow_ids:
                     authorized_files.append(file_name)
+                    # 添加到预加载列表
+                    full_path = f"{folder_name}/{file_name}"
+                    if folder_name == '/':
+                        full_path = file_name
+                    workflows_to_preload.append(full_path)
             
             # 如果有授权的文件，添加到结果中
             if authorized_files:
@@ -172,8 +173,33 @@ def get_user_workflows(user_id, token=None):
                     "files": authorized_files
                 })
         
-        # 缓存结果
+        # 缓存用户工作流列表结果
         global_workflow_cache.set(cache_key, filtered_workflows)
+        
+        # 预加载工作流内容
+        logger.info(f"开始预加载 {len(workflows_to_preload)} 个工作流内容")
+        for workflow_path in workflows_to_preload:
+            try:
+                # 构建完整路径
+                full_github_path = f"{REMOTE_WORKFLOW_BASE_PATH}/{workflow_path}"
+                # 检查缓存中是否已存在
+                cache_key = f"file_content:{full_github_path}"
+                if global_workflow_cache.get(cache_key) is None:
+                    # 异步获取工作流内容并缓存
+                    logger.info(f"预加载工作流: {workflow_path}")
+                    content = github_api.get_file_content(full_github_path)
+                    if content is not None:
+                        # 验证内容是有效的JSON
+                        try:
+                            workflow_json = json.loads(content)
+                            # 存入缓存
+                            global_workflow_cache.set(cache_key, workflow_json)
+                            logger.info(f"成功预加载工作流: {workflow_path}")
+                        except json.JSONDecodeError:
+                            logger.warning(f"预加载工作流内容无效JSON: {workflow_path}")
+            except Exception as e:
+                logger.warning(f"预加载工作流出错: {workflow_path}, 错误: {e}")
+                continue
         
         logger.info(f"用户 {user_id} 授权工作流列表: {len(filtered_workflows)} 个文件夹")
         return filtered_workflows

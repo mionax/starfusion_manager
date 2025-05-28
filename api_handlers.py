@@ -245,28 +245,32 @@ async def handle_get_user_workflow(request):
         
         logger.info(f"用户 {user_id} 请求工作流: {rel_path}")
         
-        from .workflow_manager import github_api, REMOTE_WORKFLOW_BASE_PATH, GITHUB_TOKEN
+        from .workflow_manager import github_api, REMOTE_WORKFLOW_BASE_PATH, GITHUB_TOKEN, global_workflow_cache
         # 检查GitHub Token是否配置
         if not GITHUB_TOKEN:
             return web.json_response({"error": "GitHub Token not configured"}, status=500)
         
-        # 创建用户工作流数据源
+        # 检查缓存中是否有该工作流内容
+        full_github_path = f"{REMOTE_WORKFLOW_BASE_PATH}/{rel_path}"
+        cache_key = f"file_content:{full_github_path}"
+        cached_content = global_workflow_cache.get(cache_key)
+        
+        if cached_content is not None:
+            logger.info(f"从缓存获取工作流内容: {rel_path}")
+            return web.json_response(cached_content)
+            
+        # 缓存中没有，从GitHub获取
+        logger.info(f"缓存中未找到工作流，从GitHub获取: {rel_path}")
+        
+        # 创建工作流数据源
         from .data_sources import GitHubWorkflowSource
-        user_source = GitHubWorkflowSource(github_api, "", workflow_cache)
+        source = GitHubWorkflowSource(github_api, "", global_workflow_cache)
         
-        # 构建在GitHub仓库中的完整路径 - 首先尝试用户专属目录
-        user_path = f"{REMOTE_WORKFLOW_BASE_PATH}/user_workflows/{rel_path}"
+        # 直接从公共目录获取工作流
+        public_path = f"{REMOTE_WORKFLOW_BASE_PATH}/{rel_path}"
+        content, error = source.get_workflow(public_path)
         
-        # 尝试获取用户专属工作流
-        content, error = user_source.get_workflow(user_path)
-        
-        # 如果找不到，尝试从公共目录获取
-        if error and "not found" in error.lower():
-            logger.info(f"用户工作流不存在，尝试从公共目录获取: {rel_path}")
-            public_path = f"{REMOTE_WORKFLOW_BASE_PATH}/{rel_path}"
-            content, error = user_source.get_workflow(public_path)
-        
-        # 如果仍然有错误，返回错误响应
+        # 如果有错误，返回错误响应
         if error:
             status = 404 if "not found" in error.lower() else 500
             return web.json_response({"error": error}, status=status)

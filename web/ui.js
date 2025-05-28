@@ -415,7 +415,9 @@ app.registerExtension({
                     searchInput.placeholder = "搜索云端工作流..."; // Set placeholder
                     searchInput.oninput = () => filterResults(searchInput.value.toLowerCase(), '#workflow-cloud-content');
                     refreshButton.style.display = ''; // Show refresh button
-                    loadCloudWorkflows(cloudContent); // Load cloud
+                    
+                    // 加载用户授权的云端工作流
+                    loadCloudWorkflows(cloudContent);
                 };
 
                 // 初始加载本地工作流并设置初始状态
@@ -830,22 +832,47 @@ async function loadCloudWorkflows(container) {
       contentListDiv.innerHTML = ''; // Clear only the list content
 
     try {
-        // Assuming backend provides /workflow_manager/list_remote interface
-        const response = await fetch("/workflow_manager/list_remote");
+        // 使用用户授权工作流API，只获取用户有权访问的工作流
+        const token = localStorage.getItem(AuthingConfig.tokenLocalStorageKey);
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        
+        const response = await fetch("/workflow_manager/user/workflows", { headers });
         if (!response.ok) {
              // If interface does not exist or errors, show friendly message
-             if (response.status === 404) {
+             if (response.status === 401) {
+                  const messageDiv = document.createElement("div");
+                  messageDiv.style = "color: orange;";
+                  messageDiv.innerText = "您需要登录才能查看云端工作流。";
+                 contentListDiv.appendChild(messageDiv);
+                  return;
+             } else if (response.status === 404) {
                   const messageDiv = document.createElement("div");
                   messageDiv.style = "color: orange;";
                   messageDiv.innerText = "云端工作流功能正在开发中或接口未找到。";
+                 contentListDiv.appendChild(messageDiv);
+                  return;
+             } else if (response.status === 403) {
+                  const messageDiv = document.createElement("div");
+                  messageDiv.style = "color: orange;";
+                  messageDiv.innerText = "您目前没有任何已授权的工作流。";
                  contentListDiv.appendChild(messageDiv);
                   return;
              }
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        // Render cloud workflow list (assuming structure is similar to local)
-        renderFolders(data, contentListDiv, loadRemoteWorkflow); // Render into the list div
+        
+        // 如果工作流列表为空，显示提示信息
+        if (!data || data.length === 0) {
+            const messageDiv = document.createElement("div");
+            messageDiv.style = "color: orange; padding: 20px 0;";
+            messageDiv.innerText = "您目前没有任何已授权的工作流。";
+            contentListDiv.appendChild(messageDiv);
+            return;
+        }
+        
+        // 渲染工作流列表
+        renderFolders(data, contentListDiv, loadRemoteWorkflow);
     } catch (error) {
         console.error("获取云端工作流列表失败:", error);
          const errorDiv = document.createElement("div");
@@ -925,10 +952,18 @@ function loadWorkflow(relPath) {
 // 新增函数：加载云端工作流
 function loadRemoteWorkflow(relPath) {
      console.log("[工作流管理器] 开始加载云端工作流:", relPath);
-    // 假设后端提供 /workflow_manager/workflows_remote/{path} 接口
-    fetch(`/workflow_manager/workflows_remote/${relPath}`)
+    // 使用用户授权工作流API加载工作流内容
+    const token = localStorage.getItem(AuthingConfig.tokenLocalStorageKey);
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    
+    fetch(`/workflow_manager/user/workflows/${relPath}`, { headers })
         .then(response => {
             if (!response.ok) {
+                if (response.status === 401) {
+                    throw new Error("您需要登录才能访问此工作流");
+                } else if (response.status === 403) {
+                    throw new Error("您没有权限访问此工作流");
+                }
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             return response.json();
@@ -948,9 +983,19 @@ function loadRemoteWorkflow(relPath) {
 async function refreshCloudWorkflows() {
     console.log("[工作流管理器] 刷新云端工作流列表...");
     try {
-        // Send request to backend to clear cache
+        // 获取用户token
+        const token = localStorage.getItem(AuthingConfig.tokenLocalStorageKey);
+        if (!token) {
+            alert("您需要登录才能刷新云端工作流");
+            return;
+        }
+        
+        // 发送请求到后端清除缓存
         const response = await fetch("/workflow_manager/clear_remote_cache", {
-            method: 'POST' // Use POST method to clear cache
+            method: 'POST', // Use POST method to clear cache
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
         });
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -958,15 +1003,15 @@ async function refreshCloudWorkflows() {
         const result = await response.json();
         console.log("[工作流管理器] 清除云端缓存结果:", result);
 
-        // After successful clear, reload cloud workflow list
+        // 刷新后重新加载用户授权的云端工作流
         const cloudContent = document.getElementById('workflow-cloud-content');
         if (cloudContent) {
-            // Before loading, ensure the controls (search/refresh) are visible for this tab
-             const controlsContainer = cloudContent.parentElement.previousElementSibling; // Get the controls container (previous sibling of contentContainer)
-             if(controlsContainer && controlsContainer.classList.contains('workflow-controls-container')){
-                 controlsContainer.querySelector('.workflow-search-input').placeholder = "搜索云端工作流...";
-                 controlsContainer.querySelector('.workflow-refresh-button').style.display = '';
-             }
+            // 确保控件（搜索/刷新）对此选项卡可见
+            const controlsContainer = cloudContent.parentElement.previousElementSibling; // 获取控件容器（contentContainer的前一个兄弟元素）
+            if(controlsContainer && controlsContainer.classList.contains('workflow-controls-container')){
+                controlsContainer.querySelector('.workflow-search-input').placeholder = "搜索云端工作流...";
+                controlsContainer.querySelector('.workflow-refresh-button').style.display = '';
+            }
             loadCloudWorkflows(cloudContent);
         }
 
