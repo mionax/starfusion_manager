@@ -22,7 +22,6 @@ except ImportError:
             logging.warning("使用模拟的get_user_custom_data函数")
             return {
                 "user_authing_info": json.dumps({
-                    "basic_access": {"type": "temp", "expired_at": "2025-06-02T08:00:00.000Z"},
                     "packages": [{"id": "基础工具类", "type": "lifetime", "expired_at": None}],
                     "workflows": []
                 })
@@ -63,7 +62,7 @@ class AuthManager:
         try:
             if not udf_data or 'user_authing_info' not in udf_data:
                 logger.warning("UDF数据为空或未找到user_authing_info字段")
-                return {"basic_access": {}, "packages": [], "workflows": []}
+                return {"packages": [], "workflows": []}
                 
             # 将JSON字符串解析为Python对象
             user_authing_info_str = udf_data['user_authing_info']
@@ -77,7 +76,7 @@ class AuthManager:
                     user_authing_info = ast.literal_eval(user_authing_info_str)
                 except (SyntaxError, ValueError) as e:
                     logger.error(f"解析Python字典字符串失败: {e}")
-                    return {"basic_access": {}, "packages": [], "workflows": []}
+                    return {"packages": [], "workflows": []}
             else:
                 # 尝试标准JSON解析
                 try:
@@ -91,19 +90,18 @@ class AuthManager:
                         user_authing_info = ast.literal_eval(user_authing_info_str)
                     except (SyntaxError, ValueError) as e:
                         logger.error(f"解析用户数据失败: {e}")
-                        return {"basic_access": {}, "packages": [], "workflows": []}
+                        return {"packages": [], "workflows": []}
             
             logger.info(f"成功解析user_authing_info，包含字段: {list(user_authing_info.keys())}")
             
             # 创建格式化数据结构
             return {
-                'basic_access': user_authing_info.get('basic_access', {}),
                 'packages': user_authing_info.get('packages', []),
                 'workflows': user_authing_info.get('workflows', [])
             }
         except Exception as e:
             logger.error(f"解析用户数据出错: {e}")
-            return {"basic_access": {}, "packages": [], "workflows": []}
+            return {"packages": [], "workflows": []}
     
     def _load_package_config(self) -> None:
         """加载包配置数据"""
@@ -212,17 +210,6 @@ class AuthManager:
             if not self.user_data:
                 logger.error("无法获取用户数据，无法计算授权工作流")
                 return {}
-        
-        # 检查基本访问权限
-        basic_access = self.user_data.get("basic_access", {})
-        basic_access_valid = self._is_authorization_valid(
-            basic_access.get("type", ""), 
-            basic_access.get("expired_at")
-        )
-        
-        if not basic_access_valid:
-            logger.warning("基本访问权限已过期或无效")
-            return {}
         
         # 收集授权工作流
         authorized_workflows = {}
@@ -368,7 +355,7 @@ class AuthManager:
         if not udf_data:
             logger.warning("UDF数据为空，创建默认授权管理器")
             auth_manager = AuthManager(package_config_path=package_config_path)
-            auth_manager.user_data = {"basic_access": {}, "packages": [], "workflows": []}
+            auth_manager.user_data = {"packages": [], "workflows": []}
             return auth_manager
             
         # 创建实例并解析UDF数据
@@ -393,8 +380,9 @@ class AuthManager:
         
         # 使用修复后的数据解析
         auth_manager.user_data = auth_manager._parse_user_data(udf_data)
-        if not auth_manager.user_data or not auth_manager.user_data.get('basic_access'):
-            logger.warning("解析UDF数据未产生有效的用户数据结构")
+        if not auth_manager.user_data or \
+           ('packages' not in auth_manager.user_data and 'workflows' not in auth_manager.user_data) :
+            logger.warning("解析UDF数据未产生有效的用户数据结构 (缺少 packages 或 workflows)")
         else:
             logger.info("成功从UDF数据创建AuthManager实例")
         return auth_manager
@@ -407,10 +395,6 @@ if __name__ == "__main__":
     # 在直接运行该文件时，使用模拟数据
     mock_udf_data = {
         "user_authing_info": json.dumps({
-            "basic_access": {
-                "type": "temp",
-                "expired_at": "2025-06-02T08:00:00.000Z"
-            },
             "packages": [
                 {
                     "id": "基础工具类",
@@ -419,7 +403,7 @@ if __name__ == "__main__":
                 },
                 {
                     "id": "图像生成类",
-                    "type": "monthly",
+                    "type": "temp",
                     "expired_at": "2025-06-30T23:59:59.000Z"
                 }
             ],
@@ -431,7 +415,7 @@ if __name__ == "__main__":
                 },
                 {
                     "id": "📷产品拍摄",
-                    "type": "monthly",
+                    "type": "temp",
                     "expired_at": "2025-06-30T23:59:59.000Z"
                 }
             ]

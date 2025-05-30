@@ -1,8 +1,4 @@
 {
-  "basic_access": {
-    "type": "temp",
-    "expired_at": "2025-06-02T08:00:00.000Z" 
-  },
   "packages": [],
   "workflows": []
 }

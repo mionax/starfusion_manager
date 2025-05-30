@@ -242,10 +242,6 @@ def register_user(username, password):
                 logger.warning(f"找不到配置文件，使用默认配置")
                 # 使用硬编码的默认值作为后备
                 default_user_authing_info = {
-                    "basic_access": {
-                        "type": "temp",
-                        "expired_at": None
-                    },
                     "packages": [],
                     "workflows": []
                 }
@@ -253,10 +249,6 @@ def register_user(username, password):
             logger.error(f"读取配置文件出错: {e}")
             # 使用硬编码的默认值作为后备
             default_user_authing_info = {
-                "basic_access": {
-                    "type": "temp",
-                    "expired_at": None
-                },
                 "packages": [],
                 "workflows": []
             }
@@ -267,17 +259,16 @@ def register_user(username, password):
         # 生成带时区的ISO8601格式，然后转换为标准的Z结尾格式
         expiry_time = future_date.isoformat().replace('+00:00', 'Z')
         
-        # 确保为新用户授予基础工具类包的权限
-        default_user_authing_info['basic_access']['expired_at'] = expiry_time
-        
         # 添加基础工具类包的授权
+        if not isinstance(default_user_authing_info.get('packages'), list):
+            default_user_authing_info['packages'] = []
+
         default_user_authing_info['packages'].append({
             "id": "基础工具类",
             "type": "temp",
             "expired_at": expiry_time
         })
         
-        logger.info(f"设置用户授权过期时间为: {default_user_authing_info['basic_access']['expired_at']}")
         logger.info(f"授予用户基础工具类包权限，过期时间: {expiry_time}")
         
         # 注册用户
@@ -327,10 +318,6 @@ def get_user_custom_data(token=None):
             # 如果认证未启用，返回模拟数据
             return {
                 "user_authing_info": json.dumps({
-                    "basic_access": {
-                        "type": "temp",
-                        "expired_at": "2025-06-02T08:00:00.000Z"
-                    },
                     "packages": [
                         {
                             "id": "基础工具类",
@@ -339,7 +326,7 @@ def get_user_custom_data(token=None):
                         },
                         {
                             "id": "图像生成类",
-                            "type": "monthly",
+                            "type": "temp",
                             "expired_at": "2025-06-30T23:59:59.000Z"
                         }
                     ],
@@ -351,7 +338,7 @@ def get_user_custom_data(token=None):
                         },
                         {
                             "id": "📷产品拍摄",
-                            "type": "monthly",
+                            "type": "temp",
                             "expired_at": "2025-06-30T23:59:59.000Z"
                         }
                     ]
@@ -413,10 +400,6 @@ def get_user_custom_data(token=None):
         # 如果获取失败，返回模拟数据以确保测试功能
         return {
             "user_authing_info": json.dumps({
-                "basic_access": {
-                    "type": "temp",
-                    "expired_at": "2025-06-02T08:00:00.000Z"
-                },
                 "packages": [
                     {
                         "id": "基础工具类",
